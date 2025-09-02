@@ -1,3 +1,4 @@
+// BlurText.tsx
 import { motion, Transition } from "framer-motion";
 import { useEffect, useRef, useState, useMemo } from "react";
 
@@ -14,7 +15,7 @@ type BlurTextProps = {
   easing?: (t: number) => number;
   onAnimationComplete?: () => void;
   stepDuration?: number;
-  startDelay?: number; // New prop for delaying animation start
+  startDelay?: number;
 };
 
 const buildKeyframes = (
@@ -44,52 +45,40 @@ const BlurText: React.FC<BlurTextProps> = ({
   animationFrom,
   animationTo,
   easing = (t) => t,
-  onAnimationComplete,
   stepDuration = 0.35,
-  startDelay = 0, // Default no delay
+  startDelay = 0,
 }) => {
   const elements = animateBy === "words" ? text.split(" ") : text.split("");
   const [inView, setInView] = useState(false);
   const [fontsReady, setFontsReady] = useState(false);
   const ref = useRef<HTMLParagraphElement>(null);
 
-  // Font loading effect
   useEffect(() => {
     const checkFonts = async () => {
       try {
-        // Wait for all fonts to be ready
         await document.fonts.ready;
-
-        // Double check that Orbitron is specifically loaded
         const fontFace = new FontFace(
           "Orbitron",
           "url(https://fonts.gstatic.com/s/orbitron/v31/yMJMMIlzdpvBhQQL_SC3X9yhF25-T1nyGy6BoWgz.woff2)"
         );
         await fontFace.load();
-
-        // Small delay to ensure rendering is stable
         setTimeout(() => {
           setFontsReady(true);
         }, 1000);
-      } catch (error) {
-        // Fallback if font loading fails
+      } catch {
         setTimeout(() => {
           setFontsReady(true);
         }, 500);
       }
     };
-
     checkFonts();
   }, []);
 
-  // Intersection observer effect - only runs after fonts are ready
   useEffect(() => {
     if (!ref.current || !fontsReady) return;
-
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          // Configurable delay to let other elements settle
           setTimeout(() => {
             setInView(true);
           }, startDelay);
@@ -98,7 +87,6 @@ const BlurText: React.FC<BlurTextProps> = ({
       },
       { threshold, rootMargin }
     );
-
     observer.observe(ref.current);
     return () => observer.disconnect();
   }, [threshold, rootMargin, fontsReady, startDelay]);
@@ -106,7 +94,7 @@ const BlurText: React.FC<BlurTextProps> = ({
   const defaultFrom = useMemo(
     () =>
       direction === "top"
-        ? { filter: "blur(8px)", opacity: 0, y: -30 } // Reduced blur and movement
+        ? { filter: "blur(8px)", opacity: 0, y: -30 }
         : { filter: "blur(8px)", opacity: 0, y: 30 },
     [direction]
   );
@@ -138,19 +126,17 @@ const BlurText: React.FC<BlurTextProps> = ({
       className={`blur-text ${className} flex flex-wrap`}
       style={{
         fontFamily: "Orbitron, Arial, sans-serif",
-        visibility: fontsReady ? "visible" : "hidden", // Hide until fonts load
+        visibility: fontsReady ? "visible" : "hidden",
       }}
     >
       {elements.map((segment, index) => {
         const animateKeyframes = buildKeyframes(fromSnapshot, toSnapshots);
-
         const spanTransition: Transition = {
           duration: totalDuration,
           times,
           delay: (index * delay) / 1000,
-          ease: "easeOut", // Better default easing
+          ease: easing, // ✅ Correctly set ease here
         };
-        (spanTransition as any).ease = easing;
 
         return (
           <motion.span
@@ -158,13 +144,10 @@ const BlurText: React.FC<BlurTextProps> = ({
             initial={fromSnapshot}
             animate={inView ? animateKeyframes : fromSnapshot}
             transition={spanTransition}
-            onAnimationComplete={
-              index === elements.length - 1 ? onAnimationComplete : undefined
-            }
             style={{
               display: "inline-block",
               willChange: "transform, filter, opacity",
-              transform: "translateZ(0)", // Force hardware acceleration
+              transform: "translateZ(0)",
               backfaceVisibility: "hidden",
             }}
           >

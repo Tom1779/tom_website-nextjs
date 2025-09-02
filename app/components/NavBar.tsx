@@ -8,7 +8,7 @@ export default function Navbar() {
           href="/"
           className="text-white text-2xl font-orbitron tracking-wider"
         >
-          Tom's Website
+          Tom&apos;s Website
         </Link>
         <div className="space-x-6">
           <Link

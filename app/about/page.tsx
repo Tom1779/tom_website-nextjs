@@ -37,7 +37,7 @@ export default function About() {
               <div className="space-y-6">
                 <p className="text-lg font-medium leading-relaxed text-gray-100">
                   Welcome! This website serves as a window into my professional
-                  journey. Here, you'll find a look into my background,
+                  journey. Here, you&apos;ll find a look into my background,
                   interests, and passions. As a Software Engineer, I am driven
                   by curiosity and a love for solving problems in web
                   development, data science, and machine learning.
