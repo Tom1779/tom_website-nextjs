@@ -286,14 +286,13 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
     const handleClick = () => {
       if (!enableMobileTilt || location.protocol !== "https:") return;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if (
-        typeof (window.DeviceMotionEvent as any)?.requestPermission ===
-        "function"
-      ) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (window.DeviceMotionEvent as any)
-          .requestPermission()
+      const DeviceMotionEventTyped =
+        window.DeviceMotionEvent as typeof DeviceMotionEvent & {
+          requestPermission?: () => Promise<PermissionState>;
+        };
+
+      if (typeof DeviceMotionEventTyped.requestPermission === "function") {
+        DeviceMotionEventTyped.requestPermission()
           .then((state: PermissionState) => {
             if (state === "granted") {
               window.addEventListener(
