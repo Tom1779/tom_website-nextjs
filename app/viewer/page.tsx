@@ -3,9 +3,16 @@
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 
-const PDFViewer = dynamic(() => import("../components/PDFViewer"), {
-  ssr: false,
-});
+// Instead of top-level import
+const PDFViewer = dynamic(
+  async () => {
+    const { default: PDFViewerClient } = await import(
+      "../components/PDFViewer"
+    );
+    return PDFViewerClient;
+  },
+  { ssr: false }
+);
 
 export default function ViewerPage() {
   const searchParams = useSearchParams();
