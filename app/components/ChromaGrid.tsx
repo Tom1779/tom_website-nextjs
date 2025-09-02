@@ -6,6 +6,7 @@ import React, {
   useState,
 } from "react";
 import { gsap } from "gsap";
+import Image from "next/image";
 
 export interface ChromaItem {
   image: string;
@@ -234,14 +235,14 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
             }}
           />
           <div className="relative z-10 flex-1 p-[10px] box-border">
-            <img
+            <Image
               src={c.image}
               alt={c.title}
-              loading="lazy"
-              decoding="async"
+              height={700}
+              width={700}
               className="w-full h-full object-cover rounded-[10px]"
+              // You no longer need `width` or `height`
               style={{
-                // Performance optimization for images
                 imageRendering: (performanceConfig.simplifyGradient
                   ? "optimizeSpeed"
                   : "auto") as React.CSSProperties["imageRendering"],

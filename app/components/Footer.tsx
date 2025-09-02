@@ -62,32 +62,3 @@ export default function Footer() {
     </footer>
   );
 }
-
-type AnimatedContainerProps = {
-  delay?: number;
-  className?: ComponentProps<typeof motion.div>["className"];
-  children: ReactNode;
-};
-
-function AnimatedContainer({
-  className,
-  delay = 0.1,
-  children,
-}: AnimatedContainerProps) {
-  const shouldReduceMotion = useReducedMotion();
-
-  if (shouldReduceMotion) {
-    return <div className={className}>{children}</div>;
-  }
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.6, ease: "easeOut" }}
-      className={className}
-    >
-      {children}
-    </motion.div>
-  );
-}
