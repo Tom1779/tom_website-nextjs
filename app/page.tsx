@@ -1,103 +1,138 @@
-import Image from "next/image";
+"use client";
+
+import dynamic from "next/dynamic";
+import { Suspense, useMemo, useState, useEffect } from "react";
+import ProfileCard from "./components/ProfileCard";
+import ChromaGrid from "./components/ChromaGrid";
+import BlurText from "./components/BlurText";
+import { items } from "./data/items";
+
+// Lazy load heavy components
+const PDFViewer = dynamic(() => import("./components/PDFViewer"), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-64 bg-gray-800 rounded-lg animate-pulse flex items-center justify-center">
+      <span className="text-gray-400">Loading PDF...</span>
+    </div>
+  ),
+});
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  // Memoize items to prevent unnecessary re-renders
+  const memoizedItems = useMemo(() => items, []);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  // Scale grid properties based on screen size for performance
+  const [gridConfig, setGridConfig] = useState({
+    radius: 300,
+    damping: 0.45,
+    fadeOut: 0.6,
+    ease: "power3.out",
+  });
+
+  useEffect(() => {
+    const updateGridConfig = () => {
+      const screenWidth = window.innerWidth;
+      const pixelRatio = window.devicePixelRatio || 1;
+
+      // More aggressive optimization for high-DPI and large screens
+      if (screenWidth > 2560 || pixelRatio > 2) {
+        setGridConfig({
+          radius: 180,
+          damping: 0.7,
+          fadeOut: 0.8,
+          ease: "power2.out",
+        });
+      } else if (screenWidth > 1920) {
+        setGridConfig({
+          radius: 200,
+          damping: 0.6,
+          fadeOut: 0.8,
+          ease: "power2.out",
+        });
+      } else if (screenWidth > 1200) {
+        setGridConfig({
+          radius: 250,
+          damping: 0.5,
+          fadeOut: 0.7,
+          ease: "power2.out",
+        });
+      } else {
+        setGridConfig({
+          radius: 300,
+          damping: 0.45,
+          fadeOut: 0.6,
+          ease: "power3.out",
+        });
+      }
+    };
+
+    updateGridConfig();
+    window.addEventListener("resize", updateGridConfig);
+
+    return () => window.removeEventListener("resize", updateGridConfig);
+  }, []);
+
+  return (
+    <>
+      <main className="relative z-0 text-white p-8 flex flex-col items-center justify-center flex-1 gap-14">
+        <ProfileCard
+          name="Tom Arad"
+          title="Software Engineer"
+          handle="tom.arad.2001"
+          status="Online"
+          contactText="Linkedin"
+          avatarUrl="/ME.png"
+          showUserInfo={true}
+          enableTilt={true}
+          enableMobileTilt={false}
+          onContactClick={() => {
+            window.open("https://www.linkedin.com/in/tom-arad/", "_blank");
+          }}
+        />
+
+        <BlurText
+          text="My Projects"
+          delay={150}
+          animateBy="words"
+          direction="top"
+          className="text-4xl mb-8"
+        />
+
+        {/* Optimize grid container with better constraints */}
+        <div className="relative w-full max-w-[98rem] overflow-hidden">
+          <ChromaGrid
+            items={memoizedItems}
+            radius={gridConfig.radius}
+            damping={gridConfig.damping}
+            fadeOut={gridConfig.fadeOut}
+            ease={gridConfig.ease}
+          />
         </div>
+
+        {/* Lazy load PDF with suspense boundary */}
+        <Suspense
+          fallback={
+            <div className="w-full max-w-[800px] h-64 bg-gray-800 rounded-lg animate-pulse flex items-center justify-center">
+              <span className="text-gray-400">Loading PDF viewer...</span>
+            </div>
+          }
+        >
+          <div className="w-full max-w-[800px] mx-auto">
+            <PDFViewer fileUrl="TomArad-Resume.pdf" showToolbar={false} />
+          </div>
+        </Suspense>
+
+        {/* Open in New Tab Button */}
+        <button
+          onClick={() =>
+            window.open("/viewer?file=TomArad-Resume.pdf", "_blank")
+          }
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors duration-200"
+          aria-label="Open PDF in fullscreen"
+        >
+          Open PDF in Fullscreen
+        </button>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+    </>
   );
 }
