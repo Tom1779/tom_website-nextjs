@@ -8,6 +8,13 @@ const nextConfig = {
     dangerouslyAllowSVG: false,
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
+  reactStrictMode: true,
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.externals.push("canvas");
+    }
+    return config;
+  },
   // Enable compression
   compress: true,
 };
