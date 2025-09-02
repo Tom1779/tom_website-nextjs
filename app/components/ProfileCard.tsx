@@ -1,3 +1,4 @@
+// ProfileCard.tsx
 import React, { useEffect, useRef, useCallback, useMemo } from "react";
 import Image from "next/image";
 import { useInView } from "react-intersection-observer";
@@ -58,10 +59,9 @@ const ANIMATION_CONFIG = {
   INITIAL_X_OFFSET: 70,
   INITIAL_Y_OFFSET: 60,
   DEVICE_BETA_OFFSET: 20,
-  THROTTLE_MS: 16, // ~60fps
+  THROTTLE_MS: 16,
 } as const;
 
-// Optimized utility functions
 const clamp = (value: number, min = 0, max = 100): number =>
   Math.min(Math.max(value, min), max);
 
@@ -80,23 +80,22 @@ const adjust = (
 const easeInOutCubic = (x: number): number =>
   x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
 
-// Custom hooks for performance
-const useThrottledCallback = <T extends (...args: any[]) => any>(
-  callback: T,
+const useThrottledCallback = <Args extends unknown[], R>(
+  callback: (...args: Args) => R,
   delay: number
-): T => {
+): ((...args: Args) => R | undefined) => {
   const lastCall = useRef(0);
-
   return useCallback(
-    (...args: Parameters<T>) => {
+    (...args: Args): R | undefined => {
       const now = performance.now();
       if (now - lastCall.current >= delay) {
         lastCall.current = now;
-        callback(...args);
+        return callback(...args);
       }
+      return undefined;
     },
     [callback, delay]
-  ) as T;
+  );
 };
 
 const useAnimationFrame = () => {
@@ -151,7 +150,6 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const { start: startAnimation, stop: stopAnimation } = useAnimationFrame();
 
-  // Intersection Observer for performance
   const { ref: observerRef, inView } = useInView({
     threshold: 0.1,
     triggerOnce: false,
@@ -159,10 +157,8 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
 
   const shouldEnableTilt = enableTilt && inView;
 
-  // Optimized animation handlers
   const animationHandlers = useMemo(() => {
     if (!shouldEnableTilt) return null;
-
     const updateCardTransform = (
       offsetX: number,
       offsetY: number,
@@ -171,14 +167,10 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
     ) => {
       const width = card.clientWidth;
       const height = card.clientHeight;
-
       const percentX = clamp((100 / width) * offsetX);
       const percentY = clamp((100 / height) * offsetY);
-
       const centerX = percentX - 50;
       const centerY = percentY - 50;
-
-      // Batch CSS updates for better performance
       const cssText = `
         --pointer-x: ${percentX}%;
         --pointer-y: ${percentY}%;
@@ -196,10 +188,8 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
       `
         .replace(/\s+/g, " ")
         .trim();
-
       wrap.style.cssText += cssText;
     };
-
     const createSmoothAnimation = (
       duration: number,
       startX: number,
@@ -210,38 +200,29 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
       const startTime = performance.now();
       const targetX = wrap.clientWidth / 2;
       const targetY = wrap.clientHeight / 2;
-
       const animationLoop = (currentTime: number) => {
         const elapsed = currentTime - startTime;
         const progress = clamp(elapsed / duration);
         const easedProgress = easeInOutCubic(progress);
-
         const currentX = adjust(easedProgress, 0, 1, startX, targetX);
         const currentY = adjust(easedProgress, 0, 1, startY, targetY);
-
         updateCardTransform(currentX, currentY, card, wrap);
-
         if (progress < 1) {
           startAnimation(animationLoop);
         }
       };
-
       startAnimation(animationLoop);
     };
-
     return {
       updateCardTransform,
       createSmoothAnimation,
     };
   }, [shouldEnableTilt, startAnimation]);
 
-  // Throttled event handlers
   const handlePointerMove = useThrottledCallback((event: PointerEvent) => {
     const card = cardRef.current;
     const wrap = wrapRef.current;
-
     if (!card || !wrap || !animationHandlers) return;
-
     const rect = card.getBoundingClientRect();
     animationHandlers.updateCardTransform(
       event.clientX - rect.left,
@@ -254,9 +235,7 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
   const handlePointerEnter = useCallback(() => {
     const card = cardRef.current;
     const wrap = wrapRef.current;
-
     if (!card || !wrap) return;
-
     stopAnimation();
     wrap.classList.add(styles.active);
     card.classList.add(styles.active);
@@ -266,9 +245,7 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
     (event: PointerEvent) => {
       const card = cardRef.current;
       const wrap = wrapRef.current;
-
       if (!card || !wrap || !animationHandlers) return;
-
       animationHandlers.createSmoothAnimation(
         ANIMATION_CONFIG.SMOOTH_DURATION,
         event.offsetX,
@@ -286,12 +263,9 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
     (event: DeviceOrientationEvent) => {
       const card = cardRef.current;
       const wrap = wrapRef.current;
-
       if (!card || !wrap || !animationHandlers) return;
-
       const { beta, gamma } = event;
-      if (!beta || !gamma) return;
-
+      if (beta === null || gamma === null) return;
       animationHandlers.updateCardTransform(
         card.clientHeight / 2 + gamma * mobileTiltSensitivity,
         card.clientWidth / 2 +
@@ -303,55 +277,48 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
     ANIMATION_CONFIG.THROTTLE_MS
   );
 
-  // Event listeners setup
   useEffect(() => {
     if (!shouldEnableTilt || !animationHandlers) return;
-
     const card = cardRef.current;
     const wrap = wrapRef.current;
-
     if (!card || !wrap) return;
-
-    const pointerMoveHandler = handlePointerMove as EventListener;
-    const pointerEnterHandler = handlePointerEnter as EventListener;
-    const pointerLeaveHandler = handlePointerLeave as EventListener;
-    const deviceOrientationHandler = handleDeviceOrientation as EventListener;
 
     const handleClick = () => {
       if (!enableMobileTilt || location.protocol !== "https:") return;
+
+      // ✅ Use a type assertion to fix the 'requestPermission' type error
       if (
-        typeof (window.DeviceMotionEvent as any).requestPermission ===
+        typeof (window.DeviceMotionEvent as any)?.requestPermission ===
         "function"
       ) {
         (window.DeviceMotionEvent as any)
           .requestPermission()
-          .then((state: string) => {
+          .then((state: PermissionState) => {
             if (state === "granted") {
               window.addEventListener(
                 "deviceorientation",
-                deviceOrientationHandler,
+                handleDeviceOrientation,
                 { passive: true }
               );
             }
           })
-          .catch((err: any) => console.error(err));
+          .catch((err: unknown) => {
+            console.error(err);
+          });
       } else {
-        window.addEventListener("deviceorientation", deviceOrientationHandler, {
+        window.addEventListener("deviceorientation", handleDeviceOrientation, {
           passive: true,
         });
       }
     };
 
     const options = { passive: true };
-
-    card.addEventListener("pointerenter", pointerEnterHandler, options);
-    card.addEventListener("pointermove", pointerMoveHandler, options);
-    card.addEventListener("pointerleave", pointerLeaveHandler, options);
+    card.addEventListener("pointerenter", handlePointerEnter, options);
+    card.addEventListener("pointermove", handlePointerMove, options);
+    card.addEventListener("pointerleave", handlePointerLeave, options);
     card.addEventListener("click", handleClick, options);
-
     const initialX = wrap.clientWidth - ANIMATION_CONFIG.INITIAL_X_OFFSET;
     const initialY = ANIMATION_CONFIG.INITIAL_Y_OFFSET;
-
     animationHandlers.updateCardTransform(initialX, initialY, card, wrap);
     animationHandlers.createSmoothAnimation(
       ANIMATION_CONFIG.INITIAL_DURATION,
@@ -360,13 +327,12 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
       card,
       wrap
     );
-
     return () => {
-      card.removeEventListener("pointerenter", pointerEnterHandler);
-      card.removeEventListener("pointermove", pointerMoveHandler);
-      card.removeEventListener("pointerleave", pointerLeaveHandler);
+      card.removeEventListener("pointerenter", handlePointerEnter);
+      card.removeEventListener("pointermove", handlePointerMove);
+      card.removeEventListener("pointerleave", handlePointerLeave);
       card.removeEventListener("click", handleClick);
-      window.removeEventListener("deviceorientation", deviceOrientationHandler);
+      window.removeEventListener("deviceorientation", handleDeviceOrientation);
       stopAnimation();
     };
   }, [
@@ -379,8 +345,6 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
     handleDeviceOrientation,
     stopAnimation,
   ]);
-
-  // Memoized styles
   const cardStyle = useMemo(
     () =>
       ({
@@ -393,11 +357,9 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
       } as React.CSSProperties),
     [iconUrl, grainUrl, showBehindGradient, behindGradient, innerGradient]
   );
-
   const handleContactClick = useCallback(() => {
     onContactClick?.();
   }, [onContactClick]);
-
   const handleImageError = useCallback(
     (e: React.SyntheticEvent<HTMLImageElement>) => {
       const target = e.currentTarget;
@@ -406,11 +368,8 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
     },
     []
   );
-
-  // Generate blur data URL for better UX
   const blurDataURL =
     "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q==";
-
   return (
     <div
       ref={(el) => {
@@ -469,6 +428,7 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
                         width={24}
                         height={24}
                         loading="lazy"
+                        placeholder="blur"
                         blurDataURL={blurDataURL}
                         onError={handleImageError}
                       />
