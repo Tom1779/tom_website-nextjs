@@ -1,3 +1,5 @@
+"use client";
+
 import "@react-pdf-viewer/core/lib/styles/index.css";
 import "@react-pdf-viewer/default-layout/lib/styles/index.css";
 
@@ -18,7 +20,7 @@ export default function PDFViewer({
   hideFullscreenButton = false,
   showToolbar = true,
 }: PDFViewerProps) {
-  const plugin = defaultLayoutPlugin(); // ✅ always call at top level
+  const plugin = defaultLayoutPlugin(); // always call at top level
 
   useEffect(() => {
     if (hideFullscreenButton && showToolbar) {
@@ -40,7 +42,7 @@ export default function PDFViewer({
       <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js">
         <Viewer
           fileUrl={fileUrl}
-          plugins={showToolbar ? [plugin] : []} // ✅ used conditionally
+          plugins={showToolbar ? [plugin] : []}
           defaultScale={defaultZoom}
         />
       </Worker>

@@ -8,13 +8,14 @@ import BlurText from "./components/BlurText";
 import { items } from "./data/items";
 
 // Lazy load heavy components
-const PDFViewer = dynamic(
-  async () => {
-    const { default: PDFViewerClient } = await import("./components/PDFViewer");
-    return PDFViewerClient;
-  },
-  { ssr: false }
-);
+const PDFViewer = dynamic(() => import("./components/PDFViewer"), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-64 bg-gray-800 rounded-lg animate-pulse flex items-center justify-center">
+      <span className="text-gray-400">Loading PDF...</span>
+    </div>
+  ),
+});
 
 export default function Home() {
   // Memoize items to prevent unnecessary re-renders
