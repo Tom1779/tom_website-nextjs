@@ -8,16 +8,51 @@ const nextConfig = {
     dangerouslyAllowSVG: false,
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
-  webpack: (config: any, { isServer }: { isServer: boolean }) => {
+  webpack: (config: any, { isServer }: any) => {
+    // Handle client-side builds
     if (!isServer) {
       config.resolve = config.resolve || {};
       config.resolve.fallback = {
         ...config.resolve.fallback,
         canvas: false,
+        fs: false,
+        net: false,
+        tls: false,
+        crypto: false,
+        stream: false,
+        url: false,
+        zlib: false,
+        http: false,
+        https: false,
+        assert: false,
+        os: false,
+        path: false,
       };
     }
+
+    // Ignore node modules that cause issues
+    config.externals = config.externals || [];
+    if (Array.isArray(config.externals)) {
+      config.externals.push({
+        canvas: "canvas",
+      });
+    }
+
+    // Handle .node files and other binary files
+    config.module = config.module || { rules: [] };
+    config.module.rules.push({
+      test: /\.node$/,
+      use: "raw-loader",
+    });
+
+    // Ignore warnings from pdfjs-dist
+    config.ignoreWarnings = [{ module: /node_modules\/pdfjs-dist/ }];
+
     return config;
   },
+
+  // Transpile problematic packages
+  transpilePackages: ["pdfjs-dist"],
   // Enable compression
   compress: true,
 };
