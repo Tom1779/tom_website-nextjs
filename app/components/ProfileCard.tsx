@@ -285,8 +285,6 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
 
     const handleClick = () => {
       if (!enableMobileTilt || location.protocol !== "https:") return;
-
-      // ✅ Use a type assertion to fix the 'requestPermission' type error
       if (
         typeof (window.DeviceMotionEvent as any)?.requestPermission ===
         "function"
@@ -428,7 +426,6 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
                         width={24}
                         height={24}
                         loading="lazy"
-                        placeholder="blur"
                         blurDataURL={blurDataURL}
                         onError={handleImageError}
                       />
