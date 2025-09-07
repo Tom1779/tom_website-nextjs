@@ -16,7 +16,7 @@ export const items = [
     url: "https://tom-arad.com/2023/05/17/Pokemon-Classifier.html",
   },
   {
-    image: "/images/projects/song.png",
+    image: "/SongClassifier.png",
     title: "Song Classifier",
     subtitle:
       "Python-based ML model to classify music by genre and mood using spectrograms and waveform features.",
@@ -24,7 +24,7 @@ export const items = [
     url: "https://tom-arad.com/2023/03/30/Song-Classifier.html",
   },
   {
-    image: "/images/projects/onepiece.png", // Make sure this image exists in your public folder
+    image: "/OnePieceLogo.svg", // Make sure this image exists in your public folder
     title: "One Piece Voting",
     subtitle:
       "A full-stack web app where users vote on their favorite One Piece characters. Built with Next.js and hosted on Vercel.",
@@ -32,7 +32,7 @@ export const items = [
     url: "https://onepiecevoting.com",
   },
   {
-    image: "/images/projects/odin.png", // Save a related image here
+    image: "/OdinIsFroggy.png", // Save a related image here
     title: "Odin Is Froggy B (Valheim Mod)",
     subtitle:
       "A humorous Valheim mod where Odin gets a froggy makeover. Published on Thunderstore with custom scripting and asset integration.",
