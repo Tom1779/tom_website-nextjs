@@ -21,7 +21,7 @@ export const items = [
     subtitle:
       "Python-based ML model to classify music by genre and mood using spectrograms and waveform features.",
     handle: "@sklearn",
-    url: "https://tom-arad.com/2023/03/30/Song-Classifier.html",
+    url: "https://colab.research.google.com/drive/1chjiQtYAlOEotvwR6vHCd9jbkJQZnTVR?usp=sharing",
   },
   {
     image: "/OnePieceLogo.svg", // Make sure this image exists in your public folder

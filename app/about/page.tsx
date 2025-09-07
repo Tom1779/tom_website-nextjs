@@ -14,7 +14,7 @@ export default function About() {
         </div>
 
         {/* Main content card */}
-        <div className="bg-neutral-900/60 backdrop-blur-sm p-8 lg:p-12 rounded-3xl shadow-2xl border border-neutral-800/50">
+        <div className="bg-neutral-900/60 p-8 lg:p-12 rounded-3xl shadow-2xl border border-neutral-800/50">
           {/* Flex layout */}
           <div className="flex flex-col lg:flex-row items-start gap-12">
             {/* Image section */}
