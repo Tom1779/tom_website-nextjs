@@ -16,9 +16,9 @@ export default function About() {
         {/* Main content card */}
         <div className="bg-neutral-900/60 p-8 lg:p-12 rounded-3xl shadow-2xl border border-neutral-800/50">
           {/* Flex layout */}
-          <div className="flex flex-col lg:flex-row items-start gap-12">
+          <div className="flex flex-col items-center lg:flex-row lg:items-start gap-12">
             {/* Image section */}
-            <div className="lg:w-1/3 flex-shrink-0">
+            <div className="w-full max-w-md lg:w-1/3 flex-shrink-0">
               <div className="relative group">
                 <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 to-purple-600 rounded-3xl blur opacity-25 group-hover:opacity-40 transition duration-300"></div>
                 <Image
@@ -33,7 +33,7 @@ export default function About() {
             </div>
 
             {/* Text content */}
-            <div className="lg:w-2/3 space-y-8">
+            <div className="w-full lg:w-2/3 space-y-8 text-center lg:text-left">
               <div className="space-y-6">
                 <p className="text-lg font-medium leading-relaxed text-gray-100">
                   Welcome! This website serves as a window into my professional
