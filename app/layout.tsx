@@ -3,7 +3,7 @@ import "./globals.css";
 import Navbar from "./components/NavBar";
 import Footer from "./components/Footer";
 import { Orbitron } from "next/font/google";
-import BackgroundWrapper from "./components/BackgroundWrapper";
+import ConditionalBackground from "./components/ConditionalBackground";
 
 export const metadata: Metadata = {
   title: "Tom's Website",
@@ -24,10 +24,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={orbitron.className}>
-      <body className="h-screen flex min-h-screen flex-col">
+      <body className="h-screen flex min-h-screen flex-col bg-neutral-950">
         <Navbar />
         <div className="h-16 shrink-0" />
-        <BackgroundWrapper />
+        <ConditionalBackground />
         <div className="flex-1">{children}</div>{" "}
         {/* This grows to push the footer down */}
         <Footer />
