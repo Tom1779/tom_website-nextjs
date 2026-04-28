@@ -32,6 +32,15 @@ export const items = [
     url: "https://onepiecevoting.com",
   },
   {
+    image: "/SkillLoss.jpg", // Save a related image here
+    title: "Custom Skill Loss (Valheim Mod)",
+    subtitle:
+      "A Valheim mod which allows user to customize the amount of skill lost on death. Published on Thunderstore.",
+    handle: "@valheim",
+    location: "Game Modding",
+    url: "https://thunderstore.io/c/valheim/p/ExtinctPandas/CustomSkillLoss/",
+  },
+  {
     image: "/OdinIsFroggy.png", // Save a related image here
     title: "Odin Is Froggy B (Valheim Mod)",
     subtitle:
