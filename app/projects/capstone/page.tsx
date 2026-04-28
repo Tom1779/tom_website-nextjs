@@ -80,7 +80,7 @@ export default function CapstoneProjectPage() {
         </h2>
         <p className="text-gray-300 text-base leading-relaxed mb-4">
           Capstone projects serve as a bridge between academic learning and
-          real-world application. Working with the Granger Cobb Institute for
+          real world application. Working with the Granger Cobb Institute for
           Senior Living, our three-person team set out to build a comprehensive
           platform that would connect alumni and current students.
         </p>
@@ -182,8 +182,8 @@ export default function CapstoneProjectPage() {
         </h2>
         <p className="text-gray-300 text-base leading-relaxed mb-4">
           I worked across both front-end and back-end components throughout the
-          project. My primary focus was crafting the home page — featuring the
-          dynamic post feed — and the analytics page, where the alumni map
+          project. My primary focus was crafting the home page, featuring the
+          dynamic post feed, and the analytics page, where the alumni map
           visualization lived.
         </p>
         <p className="text-gray-300 text-base leading-relaxed">
@@ -200,7 +200,7 @@ export default function CapstoneProjectPage() {
         </h2>
         <p className="text-gray-300 text-base leading-relaxed">
           Collaborating with the Granger Cobb Institute was an invaluable
-          experience — from conceptualization through implementation. Flutter and
+          experience, from conceptualization through implementation. Flutter and
           Firebase proved to be a powerful combination, and the project pushed me
           to grow as both a designer and an engineer. While there is still work
           to be done, the progress reflects the dedication of everyone on the
