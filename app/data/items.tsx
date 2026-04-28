@@ -5,7 +5,7 @@ export const items = [
     subtitle:
       "Flutter & Firebase-based app with social feed, messaging, and alumni location map. Built for the Granger Cobb Institute.",
     handle: "@flutter",
-    url: "https://tom-arad.com/2023/05/18/Capstone-Project.html",
+    url: "/projects/capstone",
   },
   {
     image: "/starters.png",

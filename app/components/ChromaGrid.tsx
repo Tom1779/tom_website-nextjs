@@ -210,11 +210,13 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
       }
     >
       {data?.map((c, i) => (
-        <article
+        <a
           key={i}
-          onMouseMove={handleCardMove}
-          onClick={() => handleCardClick(c.url)}
-          className="group relative flex flex-col w-[300px] rounded-[20px] overflow-hidden border-2 border-transparent transition-colors duration-300 cursor-pointer"
+  href={c.url}
+  target="_blank"
+  rel="noopener noreferrer"
+  onMouseMove={handleCardMove}
+  className="group relative flex flex-col w-[300px] ... no-underline"
           style={
             {
               "--card-border": c.borderColor || "transparent",
@@ -267,7 +269,7 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
               </span>
             )}
           </footer>
-        </article>
+        </a>
       ))}
 
       {/* Base overlay with performance optimizations */}
