@@ -69,13 +69,13 @@ export default function CapstoneProjectPage() {
       </section>
 
       {/* Divider */}
-      <div className="w-full max-w-4xl mx-auto px-6">
+      <div className="w-full max-w-4/6 mx-auto px-6">
         <div className="border-t border-gray-700" />
       </div>
 
       {/* Introduction */}
-      <section className="max-w-3xl mx-auto px-6 py-16">
-        <h2 className="text-amber-300 text-xs font-semibold tracking-widest uppercase mb-4">
+      <section className="max-w-4/6 mx-auto px-6 py-16">
+        <h2 className="text-amber-300 text-md font-semibold tracking-widest uppercase mb-4 text-center">
           Introduction
         </h2>
         <p className="text-gray-300 text-base leading-relaxed mb-4">
@@ -93,7 +93,7 @@ export default function CapstoneProjectPage() {
       </section>
 
       {/* Video Demo */}
-      <section className="max-w-4xl mx-auto px-6 pb-16">
+      <section className="max-w-4/6 mx-auto px-6 pb-16">
         <video
           src="/cobb-connect.mp4"
           controls
@@ -102,13 +102,13 @@ export default function CapstoneProjectPage() {
       </section>
 
       {/* Divider */}
-      <div className="w-full max-w-4xl mx-auto px-6">
+      <div className="w-full max-w-4/6 mx-auto px-6">
         <div className="border-t border-gray-700" />
       </div>
 
       {/* Tech Stack */}
-      <section className="max-w-4xl mx-auto px-6 py-16">
-        <h2 className="text-amber-300 text-xs font-semibold tracking-widest uppercase mb-6">
+      <section className="max-w-4/6 mx-auto px-6 py-16">
+        <h2 className="text-amber-300 text-md font-semibold tracking-widest uppercase mb-6">
           Tools & Technologies
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -127,13 +127,13 @@ export default function CapstoneProjectPage() {
       </section>
 
       {/* Divider */}
-      <div className="w-full max-w-4xl mx-auto px-6">
+      <div className="w-full max-w-4/6 mx-auto px-6">
         <div className="border-t border-gray-700" />
       </div>
 
       {/* Features */}
-      <section className="max-w-4xl mx-auto px-6 py-16">
-        <h2 className="text-amber-300 text-xs font-semibold tracking-widest uppercase mb-12">
+      <section className="max-w-4/6 mx-auto px-6 py-16">
+        <h2 className="text-amber-300 text-md font-semibold tracking-widest uppercase mb-12 text-center">
           Features Implemented
         </h2>
 
@@ -157,7 +157,7 @@ export default function CapstoneProjectPage() {
               </div>
 
               {/* Text */}
-              <div className="w-full md:w-1/2">
+              <div className="w-full md:w-1/3">
                 <h3 className="text-white text-xl font-semibold mb-3">
                   {feature.title}
                 </h3>
@@ -171,13 +171,13 @@ export default function CapstoneProjectPage() {
       </section>
 
       {/* Divider */}
-      <div className="w-full max-w-4xl mx-auto px-6">
+      <div className="w-full max-w-4/6 mx-auto px-6">
         <div className="border-t border-gray-700" />
       </div>
 
       {/* My Contributions */}
-      <section className="max-w-3xl mx-auto px-6 py-16">
-        <h2 className="text-amber-300 text-xs font-semibold tracking-widest uppercase mb-4">
+      <section className="max-w-4/6 mx-auto px-6 py-16">
+        <h2 className="text-amber-300 text-md font-semibold tracking-widest uppercase mb-4 text-center">
           My Contributions
         </h2>
         <p className="text-gray-300 text-base leading-relaxed mb-4">
@@ -194,8 +194,8 @@ export default function CapstoneProjectPage() {
       </section>
 
       {/* Conclusion */}
-      <section className="max-w-3xl mx-auto px-6 pb-20">
-        <h2 className="text-amber-300 text-xs font-semibold tracking-widest uppercase mb-4">
+      <section className="max-w-4/6 mx-auto px-6 pb-20">
+        <h2 className="text-amber-300 text-md font-semibold tracking-widest uppercase mb-4 text-center">
           Conclusion
         </h2>
         <p className="text-gray-300 text-base leading-relaxed">
