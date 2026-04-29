@@ -4,38 +4,35 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 
-// Make BackgroundBeams client-only to prevent hydration mismatch
 const BackgroundBeams = dynamic(
-  () =>
-    import("./BackgroundBeams").then((mod) => ({
-      default: mod.BackgroundBeams,
-    })),
-  {
-    ssr: false,
-  }
+  () => import("./BackgroundBeams").then((mod) => ({ default: mod.BackgroundBeams })),
+  { ssr: false }
+);
+
+const BackgroundBeamsStatic = dynamic(
+  () => import("./BackgroundBeamsStatic").then((mod) => ({ default: mod.BackgroundBeamsStatic })),
+  { ssr: false }
 );
 
 export default function BackgroundWrapper() {
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
+  const [isFirefox, setIsFirefox] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+    setIsFirefox(/firefox/i.test(navigator.userAgent));
   }, []);
 
-  // Don't render anything until mounted to avoid hydration mismatch
-  if (!mounted) {
-    return <div className="fixed inset-0 -z-10 bg-neutral-950" />;
-  }
+  if (!mounted) return <div className="fixed inset-0 -z-10 bg-neutral-950" />;
 
-  // Only render on homepage ("/") and about page
-  if (pathname !== "/" && pathname !== "/about") {
+  if (pathname !== "/" && pathname !== "/about" && !pathname.startsWith("/projects")) {
     return null;
   }
 
   return (
     <div className="fixed inset-0 -z-10 bg-neutral-950">
-      <BackgroundBeams />
+      {isFirefox ? <BackgroundBeams /> : <BackgroundBeamsStatic />}
     </div>
   );
 }

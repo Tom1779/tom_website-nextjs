@@ -165,3 +165,8 @@ body {
 .rpv-full-screen__overlay {
   display: none !important;
 }
+
+@keyframes aurora {
+  from { background-position: 50% 50%, 50% 50%; }
+  to   { background-position: 350% 50%, 350% 50%; }
+}

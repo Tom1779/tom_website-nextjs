@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import { gsap } from "gsap";
 import Image from "next/image";
+import Link from "next/link";
 
 export interface ChromaItem {
   image: string;
@@ -49,7 +50,6 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
 
   const data = items;
 
-  // Optimize performance based on screen size
   const [performanceConfig, setPerformanceConfig] = useState({
     useBackdropFilter: true,
     simplifyGradient: false,
@@ -62,7 +62,6 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
       const pixelRatio = window.devicePixelRatio || 1;
       const effectiveWidth = screenWidth * pixelRatio;
 
-      // Reduce quality on large/high-DPI screens
       if (effectiveWidth > 3840) {
         setPerformanceConfig({
           useBackdropFilter: false,
@@ -86,11 +85,9 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
 
     updatePerformanceConfig();
     window.addEventListener("resize", updatePerformanceConfig);
-
     return () => window.removeEventListener("resize", updatePerformanceConfig);
   }, []);
 
-  // Optimized gradient masks
   const gradientMasks = useMemo(() => {
     const baseGradient = performanceConfig.simplifyGradient
       ? "radial-gradient(circle var(--r) at var(--x) var(--y), transparent 0%, transparent 20%, rgba(0,0,0,0.5) 60%, white 100%)"
@@ -115,7 +112,6 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
     setX.current(pos.current.x);
     setY.current(pos.current.y);
 
-    // Set CSS custom properties for performance optimization
     el.style.setProperty(
       "--performance-backdrop",
       performanceConfig.useBackdropFilter
@@ -130,7 +126,6 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
 
   const moveTo = useCallback(
     (x: number, y: number) => {
-      // Kill existing animation to prevent queuing
       if (animationRef.current) {
         animationRef.current.kill();
       }
@@ -178,10 +173,6 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
     });
   }, [fadeOut, performanceConfig.reducedOpacity]);
 
-  const handleCardClick = useCallback((url?: string) => {
-    if (url) window.open(url, "_blank", "noopener,noreferrer");
-  }, []);
-
   const handleCardMove: React.MouseEventHandler<HTMLElement> = useCallback(
     (e) => {
       const c = e.currentTarget as HTMLElement;
@@ -190,6 +181,62 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
       c.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
     },
     []
+  );
+
+  const cardClassName =
+    "group relative flex flex-col w-[300px] rounded-[20px] overflow-hidden border-2 border-transparent transition-colors duration-300 cursor-pointer no-underline";
+
+  const cardStyle = (c: ChromaItem): React.CSSProperties => ({
+    "--card-border": c.borderColor || "transparent",
+    background: c.gradient,
+    "--spotlight-color": "rgba(255,255,255,0.3)",
+    contain: "layout style paint",
+    transform: "translateZ(0)",
+  } as React.CSSProperties);
+
+  const cardInner = (c: ChromaItem) => (
+    <>
+      <div
+        className="absolute inset-0 pointer-events-none transition-opacity duration-500 z-20 opacity-0 group-hover:opacity-100"
+        style={{
+          background:
+            "radial-gradient(circle at var(--mouse-x) var(--mouse-y), var(--spotlight-color), transparent 70%)",
+          willChange: "opacity",
+        }}
+      />
+      <div className="relative z-10 flex-1 p-[10px] box-border">
+        <Image
+          src={c.image}
+          alt={c.title}
+          height={700}
+          width={700}
+          className="w-full h-full object-cover rounded-[10px]"
+          style={{
+            imageRendering: (performanceConfig.simplifyGradient
+              ? "optimizeSpeed"
+              : "auto") as React.CSSProperties["imageRendering"],
+          }}
+        />
+      </div>
+      <footer className="relative z-10 p-3 text-white font-sans grid grid-rows-[1fr_auto] gap-x-3 gap-y-1">
+        <h3 className="m-0 text-[1.05rem] font-semibold text-center">
+          {c.title}
+        </h3>
+        {c.handle && (
+          <span className="text-[0.95rem] opacity-80 text-center text-amber-300">
+            {c.handle}
+          </span>
+        )}
+        <p className="m-0 text-[0.85rem] opacity-85 text-center">
+          {c.subtitle}
+        </p>
+        {c.location && (
+          <span className="text-[0.85rem] opacity-85 text-right">
+            {c.location}
+          </span>
+        )}
+      </footer>
+    </>
   );
 
   return (
@@ -203,76 +250,38 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
           "--r": `${radius}px`,
           "--x": "50%",
           "--y": "50%",
-          // Performance optimization: reduce layer composition
           contain: "layout style paint",
           willChange: "transform",
         } as React.CSSProperties
       }
     >
-      {data?.map((c, i) => (
-        <a
-          key={i}
-  href={c.url}
-  target="_blank"
-  rel="noopener noreferrer"
-  onMouseMove={handleCardMove}
-  className="group relative flex flex-col w-[300px] ... no-underline"
-          style={
-            {
-              "--card-border": c.borderColor || "transparent",
-              background: c.gradient,
-              "--spotlight-color": "rgba(255,255,255,0.3)",
-              // Performance optimization
-              contain: "layout style paint",
-              transform: "translateZ(0)", // Force hardware acceleration
-            } as React.CSSProperties
-          }
-        >
-          <div
-            className="absolute inset-0 pointer-events-none transition-opacity duration-500 z-20 opacity-0 group-hover:opacity-100"
-            style={{
-              background:
-                "radial-gradient(circle at var(--mouse-x) var(--mouse-y), var(--spotlight-color), transparent 70%)",
-              willChange: "opacity",
-            }}
-          />
-          <div className="relative z-10 flex-1 p-[10px] box-border">
-            <Image
-              src={c.image}
-              alt={c.title}
-              height={700}
-              width={700}
-              className="w-full h-full object-cover rounded-[10px]"
-              // You no longer need `width` or `height`
-              style={{
-                imageRendering: (performanceConfig.simplifyGradient
-                  ? "optimizeSpeed"
-                  : "auto") as React.CSSProperties["imageRendering"],
-              }}
-            />
-          </div>
-          <footer className="relative z-10 p-3 text-white font-sans grid grid-rows-[1fr_auto] gap-x-3 gap-y-1">
-            <h3 className="m-0 text-[1.05rem] font-semibold text-center">
-              {c.title}
-            </h3>
-            {c.handle && (
-              <span className="text-[0.95rem] opacity-80 text-center text-amber-300">
-                {c.handle}
-              </span>
-            )}
-            <p className="m-0 text-[0.85rem] opacity-85 text-center">
-              {c.subtitle}
-            </p>
-            {c.location && (
-              <span className="text-[0.85rem] opacity-85 text-right">
-                {c.location}
-              </span>
-            )}
-          </footer>
-        </a>
-      ))}
+      {data?.map((c, i) =>
+        c.url?.startsWith("/") ? (
+          <Link
+            key={i}
+            href={c.url}
+            onMouseMove={handleCardMove}
+            className={cardClassName}
+            style={cardStyle(c)}
+          >
+            {cardInner(c)}
+          </Link>
+        ) : (
+          <a
+            key={i}
+            href={c.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onMouseMove={handleCardMove}
+            className={cardClassName}
+            style={cardStyle(c)}
+          >
+            {cardInner(c)}
+          </a>
+        )
+      )}
 
-      {/* Base overlay with performance optimizations */}
+      {/* Base overlay */}
       <div
         ref={overlayRef}
         className="absolute inset-0 w-full h-full pointer-events-none z-30"
@@ -288,14 +297,13 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
             : "rgba(0,0,0,0.2)",
           maskImage: gradientMasks.baseGradient,
           WebkitMaskImage: gradientMasks.baseGradient,
-          // Performance optimizations
           contain: "layout style paint",
           willChange: "transform, opacity",
           transform: "translateZ(0)",
         }}
       />
 
-      {/* Fade overlay with performance optimizations */}
+      {/* Fade overlay */}
       <div
         ref={fadeRef}
         className="absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-[250ms] z-40"
@@ -312,7 +320,6 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
           maskImage: gradientMasks.fadeGradient,
           WebkitMaskImage: gradientMasks.fadeGradient,
           opacity: performanceConfig.reducedOpacity,
-          // Performance optimizations
           contain: "layout style paint",
           willChange: "opacity",
           transform: "translateZ(0)",

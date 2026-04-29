@@ -13,7 +13,7 @@ export const items = [
     subtitle:
       "TensorFlow CNN to classify Pokémon images with custom dataset preprocessing and high accuracy.",
     handle: "@tensorflow",
-    url: "https://tom-arad.com/2023/05/17/Pokemon-Classifier.html",
+    url: "/projects/pokemon",
   },
   {
     image: "/SongClassifier.png",
