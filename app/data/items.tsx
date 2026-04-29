@@ -35,7 +35,7 @@ export const items = [
     image: "/SkillLoss.jpg", // Save a related image here
     title: "Custom Skill Loss (Valheim Mod)",
     subtitle:
-      "A Valheim mod which allows user to customize the amount of skill lost on death. Published on Thunderstore.",
+      "A Valheim mod which allows users to customize the amount of skill lost on death. Published on Thunderstore.",
     handle: "@valheim",
     location: "Game Modding",
     url: "https://thunderstore.io/c/valheim/p/ExtinctPandas/CustomSkillLoss/",
