@@ -45,7 +45,7 @@ export default function CapstoneProjectPage() {
   return (
     <main className="relative z-0 text-white min-h-screen">
       {/* Hero */}
-      <section className="flex flex-col items-center justify-center text-center px-6 pt-20 pb-16 max-w-4xl mx-auto">
+      <section className="flex flex-col items-center justify-center  px-6 pt-20 pb-16 max-w-4xl mx-auto">
         <span className="text-amber-300 text-sm font-medium tracking-widest uppercase mb-4">
           Capstone Project · Granger Cobb Institute
         </span>
@@ -75,7 +75,7 @@ export default function CapstoneProjectPage() {
 
       {/* Introduction */}
       <section className="max-w-4/6 mx-auto px-6 py-16">
-        <h2 className="text-amber-300 text-md font-semibold tracking-widest uppercase mb-4 text-center">
+        <h2 className="text-amber-300 text-md font-semibold tracking-widest uppercase mb-4 ">
           Introduction
         </h2>
         <p className="text-gray-300 text-base leading-relaxed mb-4">
@@ -133,7 +133,7 @@ export default function CapstoneProjectPage() {
 
       {/* Features */}
       <section className="max-w-4/6 mx-auto px-6 py-16">
-        <h2 className="text-amber-300 text-md font-semibold tracking-widest uppercase mb-12 text-center">
+        <h2 className="text-amber-300 text-md font-semibold tracking-widest uppercase mb-12 ">
           Features Implemented
         </h2>
 
@@ -177,7 +177,7 @@ export default function CapstoneProjectPage() {
 
       {/* My Contributions */}
       <section className="max-w-4/6 mx-auto px-6 py-16">
-        <h2 className="text-amber-300 text-md font-semibold tracking-widest uppercase mb-4 text-center">
+        <h2 className="text-amber-300 text-md font-semibold tracking-widest uppercase mb-4 ">
           My Contributions
         </h2>
         <p className="text-gray-300 text-base leading-relaxed mb-4">
@@ -195,7 +195,7 @@ export default function CapstoneProjectPage() {
 
       {/* Conclusion */}
       <section className="max-w-4/6 mx-auto px-6 pb-20">
-        <h2 className="text-amber-300 text-md font-semibold tracking-widest uppercase mb-4 text-center">
+        <h2 className="text-amber-300 text-md font-semibold tracking-widest uppercase mb-4 ">
           Conclusion
         </h2>
         <p className="text-gray-300 text-base leading-relaxed">
