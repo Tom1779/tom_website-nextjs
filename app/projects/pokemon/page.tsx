@@ -32,7 +32,7 @@ export default function PokemonClassifierPage() {
         </h1>
         <p className="text-gray-300 text-lg leading-relaxed max-w-2xl">
           A convolutional neural network trained to identify four Pokémon species
-          from images — achieving 88–92% accuracy using TensorFlow, Keras, and a
+          from images achieving 88–92% accuracy using TensorFlow, Keras, and a
           custom preprocessed dataset.
         </p>
 
@@ -66,9 +66,9 @@ export default function PokemonClassifierPage() {
         </h2>
         <p className="text-gray-300 text-base leading-relaxed mb-4">
           For our final Machine Learning course assignment, a four-person team and
-          I set out to combine the world of Pokémon with the power of Convolutional
+          I set out to combine the world of Pokemon with the power of Convolutional
           Neural Networks. The goal: build an image recognition system capable of
-          distinguishing between four unique Pokémon species with high accuracy.
+          distinguishing between four unique Pokemon species with high accuracy.
         </p>
         <p className="text-gray-300 text-base leading-relaxed">
           CNNs are well-suited for image classification tasks due to their ability
@@ -191,7 +191,7 @@ export default function PokemonClassifierPage() {
           The most common misclassification was Charmander being identified as
           Pikachu — likely due to shared visual traits like a tail and similar
           warm skin tones. The confusion matrix and epoch graph below illustrate
-          the model's performance in detail.
+          the model&apos;s performance in detail.
         </p>
 
         <div className="flex flex-col md:flex-row gap-6">
@@ -230,7 +230,7 @@ export default function PokemonClassifierPage() {
         </h2>
         <p className="text-gray-300 text-base leading-relaxed mb-4">
           This project demonstrates that a CNN can reliably classify Pokémon images
-          with high accuracy as long as the species don't share too many visual
+          with high accuracy as long as the species don&apos;t share too many visual
           similarities. The 88–96% accuracy range held consistent across multiple
           runs with different dataset samples.
         </p>
