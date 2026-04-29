@@ -21,7 +21,7 @@ const features = [
   {
     title: "Location Visualization",
     description:
-      "Using Firebase, Flutter, and the Google Maps API, an interactive map showcases alumni locations by city — enhancing networking opportunities across geographic regions.",
+      "Using Firebase, Flutter, and the Google Maps API, an interactive map showcases alumni locations by city, enhancing networking opportunities across geographic regions.",
     image: "/cobb_map.png",
     imageAlt: "Alumni location map screenshot",
   },
@@ -45,23 +45,23 @@ export default function CapstoneProjectPage() {
   return (
     <main className="relative z-0 text-white min-h-screen">
       {/* Hero */}
-      <section className="flex flex-col items-center justify-center  px-6 pt-20 pb-16 max-w-4xl mx-auto">
-        <span className="text-amber-300 text-sm font-medium tracking-widest uppercase mb-4">
+      <section className="flex flex-col items-center justify-center px-4 md:px-6 pt-12 md:pt-20 pb-10 md:pb-16 max-w-4xl mx-auto">
+        <span className="text-amber-300 text-xs md:text-sm font-medium tracking-widest uppercase mb-3 md:mb-4">
           Capstone Project · Granger Cobb Institute
         </span>
-        <h1 className="text-4xl md:text-5xl font-bold leading-tight mb-6">
+        <h1 className="text-3xl md:text-5xl font-bold leading-tight mb-4 md:mb-6 text-center">
           Collaborative Alumni Website
         </h1>
-        <p className="text-gray-300 text-lg leading-relaxed max-w-2xl">
+        <p className="text-gray-300 text-base md:text-lg leading-relaxed max-w-2xl text-center">
           A full-stack web app connecting alumni and students through social
-          feeds, direct messaging, and an interactive location map — built with
+          feeds, direct messaging, and an interactive location map built with
           Flutter and Firebase.
         </p>
 
-        <div className="flex gap-4 mt-8 flex-wrap justify-center">
+        <div className="flex gap-3 md:gap-4 mt-6 md:mt-8 flex-wrap justify-center">
           <Link
             href="/"
-            className="px-5 py-2.5 border border-gray-600 hover:border-amber-300 text-gray-300 hover:text-amber-300 rounded-lg text-sm transition-colors duration-200"
+            className="px-4 md:px-5 py-2 md:py-2.5 border border-gray-600 hover:border-amber-300 text-gray-300 hover:text-amber-300 rounded-lg text-sm transition-colors duration-200"
           >
             ← Back to Projects
           </Link>
@@ -69,22 +69,22 @@ export default function CapstoneProjectPage() {
       </section>
 
       {/* Divider */}
-      <div className="w-full max-w-4/6 mx-auto px-6">
+      <div className="w-full max-w-4xl mx-auto px-4 md:px-6">
         <div className="border-t border-gray-700" />
       </div>
 
       {/* Introduction */}
-      <section className="max-w-4/6 mx-auto px-6 py-16">
-        <h2 className="text-amber-300 text-md font-semibold tracking-widest uppercase mb-4 ">
+      <section className="max-w-4xl mx-auto px-4 md:px-6 py-10 md:py-16">
+        <h2 className="text-amber-300 text-xs font-semibold tracking-widest uppercase mb-4">
           Introduction
         </h2>
-        <p className="text-gray-300 text-base leading-relaxed mb-4">
+        <p className="text-gray-300 text-sm md:text-base leading-relaxed mb-4">
           Capstone projects serve as a bridge between academic learning and
           real world application. Working with the Granger Cobb Institute for
           Senior Living, our three-person team set out to build a comprehensive
           platform that would connect alumni and current students.
         </p>
-        <p className="text-gray-300 text-base leading-relaxed">
+        <p className="text-gray-300 text-sm md:text-base leading-relaxed">
           The goals were clear: seamless messaging, post creation with image
           uploads, and a map displaying alumni locations by city. What followed
           was an intensive, rewarding development cycle that sharpened both my
@@ -93,7 +93,7 @@ export default function CapstoneProjectPage() {
       </section>
 
       {/* Video Demo */}
-      <section className="max-w-4/6 mx-auto px-6 pb-16">
+      <section className="max-w-4xl mx-auto px-4 md:px-6 pb-10 md:pb-16">
         <video
           src="/cobb-connect.mp4"
           controls
@@ -102,22 +102,22 @@ export default function CapstoneProjectPage() {
       </section>
 
       {/* Divider */}
-      <div className="w-full max-w-4/6 mx-auto px-6">
+      <div className="w-full max-w-4xl mx-auto px-4 md:px-6">
         <div className="border-t border-gray-700" />
       </div>
 
       {/* Tech Stack */}
-      <section className="max-w-4/6 mx-auto px-6 py-16">
-        <h2 className="text-amber-300 text-md font-semibold tracking-widest uppercase mb-6">
+      <section className="max-w-4xl mx-auto px-4 md:px-6 py-10 md:py-16">
+        <h2 className="text-amber-300 text-xs font-semibold tracking-widest uppercase mb-4 md:mb-6">
           Tools & Technologies
         </h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
           {techStack.map((tech) => (
             <div
               key={tech.label}
-              className="bg-white/5 border border-white/10 rounded-xl p-4 hover:border-amber-300/40 transition-colors duration-200"
+              className="bg-white/5 border border-white/10 rounded-xl p-3 md:p-4 hover:border-amber-300/40 transition-colors duration-200"
             >
-              <p className="text-white font-semibold text-sm mb-1">
+              <p className="text-white font-semibold text-xs md:text-sm mb-1">
                 {tech.label}
               </p>
               <p className="text-gray-400 text-xs">{tech.description}</p>
@@ -127,21 +127,21 @@ export default function CapstoneProjectPage() {
       </section>
 
       {/* Divider */}
-      <div className="w-full max-w-4/6 mx-auto px-6">
+      <div className="w-full max-w-4xl mx-auto px-4 md:px-6">
         <div className="border-t border-gray-700" />
       </div>
 
       {/* Features */}
-      <section className="max-w-4/6 mx-auto px-6 py-16">
-        <h2 className="text-amber-300 text-md font-semibold tracking-widest uppercase mb-12 ">
+      <section className="max-w-4xl mx-auto px-4 md:px-6 py-10 md:py-16">
+        <h2 className="text-amber-300 text-xs font-semibold tracking-widest uppercase mb-8 md:mb-12">
           Features Implemented
         </h2>
 
-        <div className="flex flex-col gap-20">
+        <div className="flex flex-col gap-12 md:gap-20">
           {features.map((feature, i) => (
             <div
               key={feature.title}
-              className={`flex flex-col md:flex-row gap-8 items-center ${
+              className={`flex flex-col md:flex-row gap-6 md:gap-8 items-center ${
                 i % 2 === 1 ? "md:flex-row-reverse" : ""
               }`}
             >
@@ -158,10 +158,10 @@ export default function CapstoneProjectPage() {
 
               {/* Text */}
               <div className="w-full md:w-1/3">
-                <h3 className="text-white text-xl font-semibold mb-3">
+                <h3 className="text-white text-lg md:text-xl font-semibold mb-2 md:mb-3">
                   {feature.title}
                 </h3>
-                <p className="text-gray-400 text-base leading-relaxed">
+                <p className="text-gray-400 text-sm md:text-base leading-relaxed">
                   {feature.description}
                 </p>
               </div>
@@ -171,22 +171,22 @@ export default function CapstoneProjectPage() {
       </section>
 
       {/* Divider */}
-      <div className="w-full max-w-4/6 mx-auto px-6">
+      <div className="w-full max-w-4xl mx-auto px-4 md:px-6">
         <div className="border-t border-gray-700" />
       </div>
 
       {/* My Contributions */}
-      <section className="max-w-4/6 mx-auto px-6 py-16">
-        <h2 className="text-amber-300 text-md font-semibold tracking-widest uppercase mb-4 ">
+      <section className="max-w-4xl mx-auto px-4 md:px-6 py-10 md:py-16">
+        <h2 className="text-amber-300 text-xs font-semibold tracking-widest uppercase mb-4">
           My Contributions
         </h2>
-        <p className="text-gray-300 text-base leading-relaxed mb-4">
+        <p className="text-gray-300 text-sm md:text-base leading-relaxed mb-4">
           I worked across both front-end and back-end components throughout the
           project. My primary focus was crafting the home page, featuring the
           dynamic post feed, and the analytics page, where the alumni map
           visualization lived.
         </p>
-        <p className="text-gray-300 text-base leading-relaxed">
+        <p className="text-gray-300 text-sm md:text-base leading-relaxed">
           This dual role strengthened my skills in UI design and Firebase
           integration simultaneously, and gave me a deep appreciation for
           building cohesive, user-facing features end-to-end.
@@ -194,11 +194,11 @@ export default function CapstoneProjectPage() {
       </section>
 
       {/* Conclusion */}
-      <section className="max-w-4/6 mx-auto px-6 pb-20">
-        <h2 className="text-amber-300 text-md font-semibold tracking-widest uppercase mb-4 ">
+      <section className="max-w-4xl mx-auto px-4 md:px-6 pb-16 md:pb-20">
+        <h2 className="text-amber-300 text-xs font-semibold tracking-widest uppercase mb-4">
           Conclusion
         </h2>
-        <p className="text-gray-300 text-base leading-relaxed">
+        <p className="text-gray-300 text-sm md:text-base leading-relaxed">
           Collaborating with the Granger Cobb Institute was an invaluable
           experience, from conceptualization through implementation. Flutter and
           Firebase proved to be a powerful combination, and the project pushed me
@@ -209,10 +209,10 @@ export default function CapstoneProjectPage() {
       </section>
 
       {/* Footer nav */}
-      <div className="flex justify-center pb-16">
+      <div className="flex justify-center pb-12 md:pb-16">
         <Link
           href="/"
-          className="px-5 py-2.5 border border-gray-600 hover:border-amber-300 text-gray-300 hover:text-amber-300 rounded-lg text-sm transition-colors duration-200"
+          className="px-4 md:px-5 py-2 md:py-2.5 border border-gray-600 hover:border-amber-300 text-gray-300 hover:text-amber-300 rounded-lg text-sm transition-colors duration-200"
         >
           ← Back to Projects
         </Link>
