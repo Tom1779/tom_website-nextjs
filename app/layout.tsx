@@ -4,6 +4,7 @@ import Navbar from "./components/NavBar";
 import Footer from "./components/Footer";
 import { Orbitron } from "next/font/google";
 import ConditionalBackground from "./components/ConditionalBackground";
+import { Analytics } from "@vercel/analytics/next"
 
 export const metadata: Metadata = {
   title: "Tom's Website",
@@ -31,6 +32,7 @@ export default function RootLayout({
         <div className="flex-1">{children}</div>{" "}
         {/* This grows to push the footer down */}
         <Footer />
+        <Analytics />
       </body>
     </html>
   );
