@@ -88,6 +88,7 @@ export default function Home() {
           onContactClick={() => {
             window.open("https://www.linkedin.com/in/tom-arad/", "_blank");
           }}
+          className="mt-5"
         />
 
         <BlurText
