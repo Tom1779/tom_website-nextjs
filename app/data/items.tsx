@@ -1,5 +1,13 @@
 export const items = [
   {
+    image: "/meteor.png", // Consider using a screenshot of the app or the NASA Space Apps logo
+    title: "Asteroid Madness (NASA Space Apps)",
+    subtitle:
+      "Award-winning interactive dashboard (Art & Tech) visualizing Near-Earth Objects. Built with Next.js using NASA's Neo Open APIs and custom data scraping.",
+    handle: "@nextjs",
+    url: "https://nasa-hackathon2025.vercel.app/",
+  },
+  {
     image: "/WSULogo.png", // Update with your actual image
     title: "Collaborative Alumni Website",
     subtitle:
