@@ -188,3 +188,29 @@ body {
 html[data-rain="on"] [data-bg-beams] {
   display: none;
 }
+
+/* The profile card as projected searchlight: warm glow on the clouds and a faint flicker */
+.signal-card {
+  filter: drop-shadow(0 0 28px rgba(255, 220, 150, 0.35)) drop-shadow(0 0 90px rgba(255, 210, 130, 0.18));
+  animation: signal-flicker 6s infinite;
+}
+.signal-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--card-radius);
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 45%, rgba(255, 230, 170, 0.18), rgba(255, 210, 140, 0.06) 60%, transparent 75%);
+  mix-blend-mode: screen;
+}
+@keyframes signal-flicker {
+  0%, 100% { opacity: 1; }
+  47% { opacity: 1; }
+  48% { opacity: 0.86; }
+  49% { opacity: 1; }
+  51% { opacity: 0.92; }
+  52% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .signal-card { animation: none; }
+}

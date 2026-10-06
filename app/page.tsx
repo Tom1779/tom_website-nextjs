@@ -90,29 +90,23 @@ export default function Home() {
               />
             </div>
           )}
-        />
-
-        <BlurText
-          text="About Me"
-          delay={150}
-          animateBy="words"
-          direction="top"
-          className="text-4xl"
-        />
-
-        <ProfileCard
-          name="Tom Arad"
-          title="Software Engineer"
-          handle="tom.arad.2001"
-          status="Online"
-          contactText="Linkedin"
-          avatarUrl="/ME.png"
-          showUserInfo={true}
-          enableTilt={true}
-          enableMobileTilt={false}
-          onContactClick={() => {
-            window.open("https://www.linkedin.com/in/tom-arad/", "_blank");
-          }}
+          aboutTitle={<BlurText text="About Me" delay={150} animateBy="words" direction="top" className="text-4xl" />}
+          about={
+            <ProfileCard
+              name="Tom Arad"
+              title="Software Engineer"
+              handle="tom.arad.2001"
+              status="Online"
+              contactText="Linkedin"
+              avatarUrl="/ME.png"
+              showUserInfo={true}
+              enableTilt={true}
+              enableMobileTilt={false}
+              onContactClick={() => {
+                window.open("https://www.linkedin.com/in/tom-arad/", "_blank");
+              }}
+            />
+          }
         />
 
         {/* Lazy load PDF with suspense boundary */}

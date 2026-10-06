@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUpRight, CloudLightning, CloudRain, LayoutGrid, RotateCcw } from "lucide-react";
 import { rainStore } from "./store";
-import { cityHeight, computeCityLayout, type CityLayout } from "./layout";
+import { cityHeight, computeCityLayout, POOL_H, type CityLayout } from "./layout";
 
 const RainScene = dynamic(() => import("./RainScene"), { ssr: false });
 
@@ -58,9 +58,12 @@ interface RainProjectsProps {
   items: RainProject[];
   /** The plain list view (shown for reduced motion, no WebGL, or when toggled). */
   renderList: () => ReactNode;
+  /** The profile card: projected by the bat-signal in the rain view, shown under a title in list view. */
+  about?: ReactNode;
+  aboutTitle?: ReactNode;
 }
 
-export default function RainProjects({ items, renderList }: RainProjectsProps) {
+export default function RainProjects({ items, renderList, about, aboutTitle }: RainProjectsProps) {
   const [mode, setMode] = useState<ViewMode>("rain");
   const [ready, setReady] = useState(false);
   const [revealed, setRevealed] = useState<boolean[]>(() => items.map(() => false));
@@ -69,6 +72,8 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
   const [card, setCard] = useState(-1);
   const cardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cityRef = useRef<HTMLDivElement>(null);
+  const signalRef = useRef<HTMLDivElement>(null);
+  const signalCardRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
   const lastPointerType = useRef<string>("mouse");
 
@@ -126,6 +131,17 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
       rainStore.layout = null;
     };
   }, [mode, items.length]);
+
+  // The bat-signal section: the scene aims its searchlight at the card and starts the pool below it
+  useEffect(() => {
+    if (mode !== "rain") return;
+    rainStore.signalEl = signalRef.current;
+    rainStore.signalCardEl = signalCardRef.current;
+    return () => {
+      rainStore.signalEl = null;
+      rainStore.signalCardEl = null;
+    };
+  }, [mode]);
 
   // Hide the beams background and track the pointer while the rain view is active
   useEffect(() => {
@@ -299,154 +315,179 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
   };
 
   return (
-    <section
-      className="relative w-full flex flex-col items-center"
-      style={{ minHeight: showRain ? (layout?.height ?? 640) : undefined }}
-      aria-labelledby="projects-heading"
-    >
-      {showRain && ready && <RainScene images={items.map((p) => p.image)} onReveal={handleReveal} />}
-
-      <header
-        ref={headerRef}
-        className="relative z-20 w-full max-w-6xl px-4 pt-10 pb-4 text-center flex flex-col items-center gap-3"
+    <>
+      <section
+        className="relative w-full flex flex-col items-center"
+        style={{ minHeight: showRain ? (layout?.height ?? 640) : undefined }}
+        aria-labelledby="projects-heading"
       >
-        <p className="text-xs sm:text-sm tracking-[0.35em] uppercase text-sky-200/70">Software Engineer</p>
-        <h1 className="text-4xl sm:text-6xl font-bold text-white drop-shadow-[0_2px_18px_rgba(120,160,255,0.35)]">
-          Tom Arad
-        </h1>
-        <h2 id="projects-heading" className="sr-only">
-          Projects
-        </h2>
-        {showRain && (
-          <p className="max-w-xl text-sm sm:text-base text-slate-300/90 font-sans">
-            <span className="pointer-coarse:hidden">
-              Some windows in the city are frosted over. Hold your umbrella over one to dry it and see what&apos;s
-              inside.
-            </span>
-            <span className="hidden pointer-coarse:inline">
-              Some windows are frosted over. Tap one to plant your umbrella over it.
-            </span>
-          </p>
-        )}
+        {showRain && ready && <RainScene images={items.map((p) => p.image)} onReveal={handleReveal} />}
 
-        <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 font-sans text-sm">
+        <header
+          ref={headerRef}
+          className="relative z-20 w-full max-w-6xl px-4 pt-10 pb-4 text-center flex flex-col items-center gap-3"
+        >
+          <p className="text-xs sm:text-sm tracking-[0.35em] uppercase text-sky-200/70">Software Engineer</p>
+          <h1 className="text-4xl sm:text-6xl font-bold text-white drop-shadow-[0_2px_18px_rgba(120,160,255,0.35)]">
+            Tom Arad
+          </h1>
+          <h2 id="projects-heading" className="sr-only">
+            Projects
+          </h2>
           {showRain && (
-            <>
-              <button
-                type="button"
-                onClick={flash}
-                className="inline-flex items-center gap-2 rounded-full border border-sky-200/30 bg-slate-900/60 px-4 py-2 text-sky-100 backdrop-blur hover:bg-sky-200/15 hover:border-sky-200/60 transition"
-              >
-                <CloudLightning className="w-4 h-4" aria-hidden="true" />
-                Flash: show me everything
-              </button>
-              {/* Always laid out (dimmed until needed) so revealing a window never shifts the city */}
-              <button
-                type="button"
-                onClick={refog}
-                disabled={!anyRevealed}
-                className={`inline-flex items-center gap-2 rounded-full border border-white/15 bg-slate-900/60 px-4 py-2 text-slate-200 backdrop-blur hover:bg-white/10 transition ${
-                  anyRevealed ? "opacity-100" : "opacity-40 cursor-not-allowed"
-                }`}
-              >
-                <RotateCcw className="w-4 h-4" aria-hidden="true" />
-                Fog up again
-              </button>
-            </>
+            <p className="max-w-xl text-sm sm:text-base text-slate-300/90 font-sans">
+              <span className="pointer-coarse:hidden">
+                Some windows in the city are frosted over. Hold your umbrella over one to dry it and see what&apos;s
+                inside.
+              </span>
+              <span className="hidden pointer-coarse:inline">
+                Some windows are frosted over. Tap one to plant your umbrella over it.
+              </span>
+            </p>
           )}
-          <button
-            type="button"
-            onClick={() => switchMode(showRain ? "list" : "rain")}
-            aria-pressed={!showRain}
-            className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-slate-900/60 px-4 py-2 text-slate-200 backdrop-blur hover:bg-white/10 transition"
-          >
-            {showRain ? (
+
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 font-sans text-sm">
+            {showRain && (
               <>
-                <LayoutGrid className="w-4 h-4" aria-hidden="true" />
-                Skip to list view
-              </>
-            ) : (
-              <>
-                <CloudRain className="w-4 h-4" aria-hidden="true" />
-                Back to the rain
+                <button
+                  type="button"
+                  onClick={flash}
+                  className="inline-flex items-center gap-2 rounded-full border border-sky-200/30 bg-slate-900/60 px-4 py-2 text-sky-100 backdrop-blur hover:bg-sky-200/15 hover:border-sky-200/60 transition"
+                >
+                  <CloudLightning className="w-4 h-4" aria-hidden="true" />
+                  Flash: show me everything
+                </button>
+                {/* Always laid out (dimmed until needed) so revealing a window never shifts the city */}
+                <button
+                  type="button"
+                  onClick={refog}
+                  disabled={!anyRevealed}
+                  className={`inline-flex items-center gap-2 rounded-full border border-white/15 bg-slate-900/60 px-4 py-2 text-slate-200 backdrop-blur hover:bg-white/10 transition ${
+                    anyRevealed ? "opacity-100" : "opacity-40 cursor-not-allowed"
+                  }`}
+                >
+                  <RotateCcw className="w-4 h-4" aria-hidden="true" />
+                  Fog up again
+                </button>
               </>
             )}
-          </button>
-        </div>
-      </header>
+            <button
+              type="button"
+              onClick={() => switchMode(showRain ? "list" : "rain")}
+              aria-pressed={!showRain}
+              className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-slate-900/60 px-4 py-2 text-slate-200 backdrop-blur hover:bg-white/10 transition"
+            >
+              {showRain ? (
+                <>
+                  <LayoutGrid className="w-4 h-4" aria-hidden="true" />
+                  Skip to list view
+                </>
+              ) : (
+                <>
+                  <CloudRain className="w-4 h-4" aria-hidden="true" />
+                  Back to the rain
+                </>
+              )}
+            </button>
+          </div>
+        </header>
 
-      {showRain ? (
-        <div ref={cityRef} className="umbrella-zone absolute inset-x-0 top-0" style={{ height: layout?.height ?? 640 }}>
-          {layout && (
-            <ul>
-              {layout.windows.map((w) => {
-                const i = w.project;
-                const item = items[i];
-                if (!item) return null;
-                const isOpen = revealed[i];
-                const external = item.url?.startsWith("http");
-                return (
-                  <li key={item.title}>
-                    <a
-                      data-index={i}
-                      data-revealed={isOpen ? "" : undefined}
-                      href={item.url ?? "#"}
-                      target={external ? "_blank" : undefined}
-                      rel={external ? "noopener noreferrer" : undefined}
-                      style={{ left: w.x - HIT, top: w.y - HIT, width: w.w + HIT * 2, height: w.h + HIT * 2 }}
-                      className="absolute rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-200"
-                      onClick={(e) => {
-                        const touch = lastPointerType.current === "touch";
-                        if (!isOpen) {
-                          // A frosted window can't be opened yet: a click speeds up drying,
-                          // a tap just plants the umbrella (handled by the pointerdown listener)
-                          e.preventDefault();
-                          if (!touch) rainStore.boost[i] = 3;
-                        } else if (touch && card !== i) {
-                          // On touch, the first tap on a dry window shows its card
-                          e.preventDefault();
-                          showCard(i);
-                        }
-                      }}
-                      onPointerEnter={(e) => {
-                        if (e.pointerType !== "touch" && isOpen) showCard(i);
-                      }}
-                      onPointerLeave={(e) => {
-                        if (e.pointerType !== "touch") hideCardSoon();
-                      }}
-                      onFocus={() => {
-                        // Keyboard users get the window dried straight away
-                        if (!isOpen && lastPointerType.current !== "touch") rainStore.boost[i] = 6;
-                        if (isOpen) showCard(i);
-                      }}
-                      onBlur={hideCardSoon}
-                    >
-                      <span className="sr-only">
-                        {item.title}: {item.subtitle}
+        {showRain ? (
+          <div
+            ref={cityRef}
+            className="umbrella-zone absolute inset-x-0 top-0"
+            style={{ height: layout?.height ?? 640 }}
+          >
+            {layout && (
+              <ul>
+                {layout.windows.map((w) => {
+                  const i = w.project;
+                  const item = items[i];
+                  if (!item) return null;
+                  const isOpen = revealed[i];
+                  const external = item.url?.startsWith("http");
+                  return (
+                    <li key={item.title}>
+                      <a
+                        data-index={i}
+                        data-revealed={isOpen ? "" : undefined}
+                        href={item.url ?? "#"}
+                        target={external ? "_blank" : undefined}
+                        rel={external ? "noopener noreferrer" : undefined}
+                        style={{ left: w.x - HIT, top: w.y - HIT, width: w.w + HIT * 2, height: w.h + HIT * 2 }}
+                        className="absolute rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-200"
+                        onClick={(e) => {
+                          const touch = lastPointerType.current === "touch";
+                          if (!isOpen) {
+                            // A frosted window can't be opened yet: a click speeds up drying,
+                            // a tap just plants the umbrella (handled by the pointerdown listener)
+                            e.preventDefault();
+                            if (!touch) rainStore.boost[i] = 3;
+                          } else if (touch && card !== i) {
+                            // On touch, the first tap on a dry window shows its card
+                            e.preventDefault();
+                            showCard(i);
+                          }
+                        }}
+                        onPointerEnter={(e) => {
+                          if (e.pointerType !== "touch" && isOpen) showCard(i);
+                        }}
+                        onPointerLeave={(e) => {
+                          if (e.pointerType !== "touch") hideCardSoon();
+                        }}
+                        onFocus={() => {
+                          // Keyboard users get the window dried straight away
+                          if (!isOpen && lastPointerType.current !== "touch") rainStore.boost[i] = 6;
+                          if (isOpen) showCard(i);
+                        }}
+                        onBlur={hideCardSoon}
+                      >
+                        <span className="sr-only">
+                          {item.title}: {item.subtitle}
+                        </span>
+                      </a>
+                      {/* name tag hung under a window once it's dry */}
+                      <span
+                        aria-hidden="true"
+                        style={tagStyle(w, layout.width, layout.win.w + layout.gap.x - 6)}
+                        className={`pointer-events-none absolute flex justify-center text-center font-sans text-[10px] leading-tight sm:text-[11px] text-amber-100 transition-opacity duration-500 ${
+                          isOpen ? "opacity-100" : "opacity-0"
+                        }`}
+                      >
+                        <span className="rounded-md border border-amber-200/40 bg-slate-950/85 px-1.5 py-0.5 shadow-[0_0_12px_rgba(255,190,110,0.25)]">
+                          {shortTitle(item.title)}
+                        </span>
                       </span>
-                    </a>
-                    {/* name tag hung under a window once it's dry */}
-                    <span
-                      aria-hidden="true"
-                      style={tagStyle(w, layout.width, layout.win.w + layout.gap.x - 6)}
-                      className={`pointer-events-none absolute flex justify-center text-center font-sans text-[10px] leading-tight sm:text-[11px] text-amber-100 transition-opacity duration-500 ${
-                        isOpen ? "opacity-100" : "opacity-0"
-                      }`}
-                    >
-                      <span className="rounded-md border border-amber-200/40 bg-slate-950/85 px-1.5 py-0.5 shadow-[0_0_12px_rgba(255,190,110,0.25)]">
-                        {shortTitle(item.title)}
-                      </span>
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          {renderCard()}
-        </div>
-      ) : (
-        <div className="w-full flex flex-col items-center px-4 pb-8">{renderList()}</div>
-      )}
-    </section>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {renderCard()}
+          </div>
+        ) : (
+          <div className="w-full flex flex-col items-center px-4 pb-8">{renderList()}</div>
+        )}
+      </section>
+
+      {about &&
+        (showRain ? (
+          // the card, projected onto the rain clouds by a searchlight on the roof below it
+          <div
+            ref={signalRef}
+            className="relative w-full flex justify-center pt-24 sm:pt-32"
+            style={{ paddingBottom: 320, marginBottom: POOL_H }}
+          >
+            <div ref={signalCardRef} className="signal-card relative">
+              {about}
+            </div>
+          </div>
+        ) : (
+          <div className="w-full flex flex-col items-center gap-14 pt-14">
+            {aboutTitle}
+            {about}
+          </div>
+        ))}
+    </>
   );
 }
