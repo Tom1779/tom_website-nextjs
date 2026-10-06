@@ -71,8 +71,11 @@ export default function RainProjects({ items, renderList, about, aboutTitle }: R
   // project whose detail card is showing (hovered / focused / tapped)
   const [card, setCard] = useState(-1);
   const cardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // the profile card pop-up opened from the signal
+  const [profileOpen, setProfileOpen] = useState(false);
+  const closeProfileRef = useRef<HTMLButtonElement>(null);
   const cityRef = useRef<HTMLDivElement>(null);
-  const signalCardRef = useRef<HTMLDivElement>(null);
+  const signalCardRef = useRef<HTMLButtonElement>(null);
   const headerRef = useRef<HTMLElement>(null);
   const lastPointerType = useRef<string>("mouse");
 
@@ -131,7 +134,20 @@ export default function RainProjects({ items, renderList, about, aboutTitle }: R
     };
   }, [mode, items.length]);
 
-  // The bat-signal section: the scene aims its searchlight at the card and starts the pool below it
+  // Profile pop-up: focus the close button, close on Escape, hand focus back to the signal
+  useEffect(() => {
+    if (!profileOpen) return;
+    const opener = signalCardRef.current;
+    closeProfileRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setProfileOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      opener?.focus({ preventScroll: true });
+    };
+  }, [profileOpen]);
+
+  // The bat-signal: the scene aims its searchlight at this button
   useEffect(() => {
     if (mode !== "rain") return;
     rainStore.signalCardEl = signalCardRef.current;
@@ -404,9 +420,24 @@ export default function RainProjects({ items, renderList, about, aboutTitle }: R
           </div>
 
           {/* the profile card, projected into the sky by a searchlight on a rooftop below it */}
+          {/* the signal in the sky: drawn by the scene, this is just its hit-area */}
           {inSky && (
-            <div ref={signalCardRef} className="signal-card relative shrink-0">
-              {about}
+            <div className="flex shrink-0 flex-col items-center gap-2">
+              <button
+                ref={signalCardRef}
+                type="button"
+                onClick={() => setProfileOpen(true)}
+                onPointerEnter={() => (rainStore.signalHover = true)}
+                onPointerLeave={() => (rainStore.signalHover = false)}
+                onFocus={() => (rainStore.signalHover = true)}
+                onBlur={() => (rainStore.signalHover = false)}
+                aria-haspopup="dialog"
+                aria-label="Open Tom's profile card"
+                className="h-44 w-44 sm:h-60 sm:w-60 md:h-64 md:w-64 cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-amber-200/80"
+              />
+              <span className="font-sans text-[11px] tracking-[0.25em] uppercase text-amber-100/60">
+                Answer the signal
+              </span>
             </div>
           )}
         </header>
@@ -499,6 +530,28 @@ export default function RainProjects({ items, renderList, about, aboutTitle }: R
             {about}
           </div>
         ))}
+      {profileOpen && about && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Tom's profile"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={(e) => e.target === e.currentTarget && setProfileOpen(false)}
+        >
+          <div className="relative animate-in zoom-in-90 fade-in duration-300">
+            <button
+              ref={closeProfileRef}
+              type="button"
+              onClick={() => setProfileOpen(false)}
+              aria-label="Close"
+              className="absolute -top-12 right-0 z-10 rounded-full border border-white/20 bg-slate-900/80 px-3 py-1.5 font-sans text-sm text-slate-200 hover:bg-white/10"
+            >
+              Close ✕
+            </button>
+            {about}
+          </div>
+        </div>
+      )}
     </>
   );
 }

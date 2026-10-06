@@ -19,8 +19,9 @@ export const rainStore = {
   },
   // The city container and the layout both the DOM and the shader draw from
   cityEl: null as HTMLElement | null,
-  // the profile card projected into the sky by the searchlight
+  // the signal projected into the sky by the searchlight (a button that opens the profile card)
   signalCardEl: null as HTMLElement | null,
+  signalHover: false,
   layout: null as CityLayout | null,
   dryness: new Float32Array(MAX_PROJECTS),
   // eased dryness actually shown on screen (shared by the window shader and its pixel cloud)

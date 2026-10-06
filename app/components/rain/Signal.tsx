@@ -1,12 +1,55 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { rainStore } from "./store";
 import { worldPerPixel } from "./quality";
 
 const SIGNAL_Z = -29;
+const STENCIL = 256;
+
+/**
+ * Turn the portrait into a projector stencil: R = how much light passes (bright disc outside the
+ * silhouette, three posterised levels inside it), so the face reads like the bat in a bat-signal.
+ */
+async function buildStencil(src: string) {
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = reject;
+    i.src = src;
+  });
+  const S = STENCIL;
+  const c = document.createElement("canvas");
+  c.width = c.height = S;
+  const ctx = c.getContext("2d", { willReadFrequently: true })!;
+  const k = Math.min((S * 0.82) / img.naturalWidth, (S * 0.82) / img.naturalHeight);
+  const w = img.naturalWidth * k;
+  const h = img.naturalHeight * k;
+  ctx.drawImage(img, (S - w) / 2, S - h - S * 0.06, w, h);
+  const data = ctx.getImageData(0, 0, S, S);
+  const d = data.data;
+  const lum = (i: number) => 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+  const inside: number[] = [];
+  for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 128) inside.push(lum(i));
+  inside.sort((a, b) => a - b);
+  const t1 = inside[Math.floor(inside.length * 0.55)] ?? 60;
+  const t2 = inside[Math.floor(inside.length * 0.86)] ?? 140;
+  for (let i = 0; i < d.length; i += 4) {
+    let v = 255;
+    if (d[i + 3] > 128) {
+      const l = lum(i);
+      v = l < t1 ? 0 : l < t2 ? 70 : 160;
+    }
+    d[i] = d[i + 1] = d[i + 2] = v;
+    d[i + 3] = 255;
+  }
+  ctx.putImageData(data, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.NoColorSpace;
+  return tex;
+}
 
 const vertexShader = /* glsl */ `
   varying vec2 vUv;
@@ -25,6 +68,9 @@ const fragmentShader = /* glsl */ `
   uniform float uRoof;  // roof line under the searchlight (screen px)
   uniform float uTime;
   uniform float uFlash;
+  uniform float uHover;
+  uniform sampler2D uStencil;
+  uniform float uStencilReady;
   varying vec2 vUv;
 
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -44,7 +90,7 @@ const fragmentShader = /* glsl */ `
   void main() {
     vec2 p = vec2(vUv.x * uView.x, (1.0 - vUv.y) * uView.y);
     vec2 c = uCard.xy;
-    float R = max(uCard.z, uCard.w) * 1.2;
+    float R = uCard.z;
 
     // light is accumulated, then the searchlight hardware is drawn over it
     float light = 0.0;
@@ -54,8 +100,18 @@ const fragmentShader = /* glsl */ `
     float detail = fbm(p * 0.015 + vec2(-uTime * 0.02, uTime * 0.01));
     float r = length(p - c) / R;
     float lump = 0.45 + 0.9 * smoothstep(0.3, 0.8, clouds) * (0.7 + 0.3 * detail);
-    light += (1.0 - smoothstep(0.8, 1.0, r)) * lump * 0.34;
-    light += exp(-abs(r - 0.92) * 16.0) * 0.4;                    // brighter rim of the disc
+    // the stencil: the portrait cut out of the disc, softened like a real projection
+    float pass = 1.0;
+    if (uStencilReady > 0.5) {
+      vec2 suv = (p - c) / (2.0 * R) + 0.5;
+      suv.y = 1.0 - suv.y;
+      float o = 1.2 / (2.0 * R);
+      pass = (texture2D(uStencil, suv).r * 2.0 + texture2D(uStencil, suv + vec2(o, 0.0)).r
+            + texture2D(uStencil, suv - vec2(o, 0.0)).r + texture2D(uStencil, suv + vec2(0.0, o)).r
+            + texture2D(uStencil, suv - vec2(0.0, o)).r) / 6.0;
+    }
+    light += (1.0 - smoothstep(0.86, 0.92, r)) * mix(0.03, 1.0, pass) * lump * (0.78 + 0.2 * uHover);
+    light += exp(-abs(r - 0.93) * 22.0) * (0.45 + 0.2 * uHover); // brighter rim of the disc
     light += exp(-max(r - 1.0, 0.0) * 3.0) * step(1.0, r) * 0.06;  // soft spill around it
 
     // the beam: a widening cone from the lens to the disc, with dust and lit rain inside it
@@ -110,9 +166,31 @@ export default function Signal() {
       uRoof: { value: 0 },
       uTime: { value: 0 },
       uFlash: { value: 0 },
+      uHover: { value: 0 },
+      uStencil: { value: null as THREE.Texture | null },
+      uStencilReady: { value: 0 },
     }),
     [],
   );
+  const [stencil, setStencil] = useState<THREE.CanvasTexture | null>(null);
+  useEffect(() => {
+    let tex: THREE.CanvasTexture | null = null;
+    let cancelled = false;
+    buildStencil("/ME.png")
+      .then((t) => {
+        if (cancelled) return t.dispose();
+        tex = t;
+        setStencil(t);
+      })
+      .catch(() => {
+        /* no portrait: the signal is a plain disc */
+      });
+    return () => {
+      cancelled = true;
+      tex?.dispose();
+    };
+  }, []);
+  const hover = useRef(0);
 
   useFrame((state) => {
     const m = mesh.current;
@@ -159,6 +237,10 @@ export default function Signal() {
     u.uRoof.value = roof;
     u.uTime.value = state.clock.elapsedTime;
     u.uFlash.value = rainStore.flash;
+    hover.current += ((rainStore.signalHover ? 1 : 0) - hover.current) * 0.15;
+    u.uHover.value = hover.current;
+    u.uStencil.value = stencil;
+    u.uStencilReady.value = stencil ? 1 : 0;
   });
 
   return (
