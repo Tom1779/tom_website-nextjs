@@ -5,6 +5,7 @@ import { Suspense, useMemo, useState, useEffect } from "react";
 import ProfileCard from "./components/ProfileCard";
 import ChromaGrid from "./components/ChromaGrid";
 import BlurText from "./components/BlurText";
+import RainProjects from "./components/rain/RainProjects";
 import { items } from "./data/items";
 
 // Lazy load heavy components
@@ -74,7 +75,31 @@ export default function Home() {
 
   return (
     <>
-      <main className="relative z-0 text-white p-8 flex flex-col items-center justify-center flex-1 gap-14">
+      <main className="relative z-0 text-white p-8 pt-0 flex flex-col items-center justify-center flex-1 gap-14">
+        {/* Rain & umbrella hero: projects behind fogged glass (list view fallback inside) */}
+        <RainProjects
+          items={memoizedItems}
+          renderList={() => (
+            <div className="relative w-full max-w-[98rem] overflow-hidden">
+              <ChromaGrid
+                items={memoizedItems}
+                radius={gridConfig.radius}
+                damping={gridConfig.damping}
+                fadeOut={gridConfig.fadeOut}
+                ease={gridConfig.ease}
+              />
+            </div>
+          )}
+        />
+
+        <BlurText
+          text="About Me"
+          delay={150}
+          animateBy="words"
+          direction="top"
+          className="text-4xl"
+        />
+
         <ProfileCard
           name="Tom Arad"
           title="Software Engineer"
@@ -88,27 +113,7 @@ export default function Home() {
           onContactClick={() => {
             window.open("https://www.linkedin.com/in/tom-arad/", "_blank");
           }}
-          className="mt-5"
         />
-
-        <BlurText
-          text="My Projects"
-          delay={150}
-          animateBy="words"
-          direction="top"
-          className="text-4xl mb-8"
-        />
-
-        {/* Optimize grid container with better constraints */}
-        <div className="relative w-full max-w-[98rem] overflow-hidden">
-          <ChromaGrid
-            items={memoizedItems}
-            radius={gridConfig.radius}
-            damping={gridConfig.damping}
-            fadeOut={gridConfig.fadeOut}
-            ease={gridConfig.ease}
-          />
-        </div>
 
         {/* Lazy load PDF with suspense boundary */}
         <Suspense

@@ -170,3 +170,16 @@ body {
   from { background-position: 50% 50%, 50% 50%; }
   to   { background-position: 350% 50%, 350% 50%; }
 }
+/* --- Rain & umbrella view --- */
+/* The umbrella replaces the cursor over the panes (mouse / pen only) */
+@media (pointer: fine) {
+  .umbrella-zone,
+  .umbrella-zone * {
+    cursor: none;
+  }
+}
+
+/* The rain canvas covers the page, so skip painting the beams behind it */
+html[data-rain="on"] [data-bg-beams] {
+  display: none;
+}

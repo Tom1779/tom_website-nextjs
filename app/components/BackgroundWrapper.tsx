@@ -31,7 +31,7 @@ export default function BackgroundWrapper() {
   }
 
   return (
-    <div className="fixed inset-0 -z-10 bg-neutral-950">
+    <div data-bg-beams className="fixed inset-0 -z-10 bg-neutral-950">
       {isFirefox ? <BackgroundBeams /> : <BackgroundBeamsStatic />}
     </div>
   );
