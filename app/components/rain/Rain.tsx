@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { rainStore } from "./store";
 import { CAMERA_Z, worldPerPixel } from "./quality";
 import { umbrellaState } from "./Umbrella";
+import { POOL_H } from "./layout";
 
 const vertexShader = /* glsl */ `
   attribute vec4 aSeed;   // x offset, phase, depth, visibility threshold
@@ -20,6 +21,7 @@ const vertexShader = /* glsl */ `
   uniform vec3 uUmb;       // umbrella rim centre (x, y) on z = 0 plane, z = active
   uniform vec2 uUmbShape;  // radius, canopy height
   uniform float uUmbTilt;
+  uniform float uStopY;    // z = 0 plane y below which it stops raining (the grotto ceiling)
 
   varying float vAlpha;
   varying float vT;
@@ -45,6 +47,8 @@ const vertexShader = /* glsl */ `
     // shelter fades out far below the umbrella, as wind blows rain back in
     float shelter = under * (1.0 - smoothstep(r * 2.6, r * 4.0, depthBelow)) * uUmb.z;
     visible *= 1.0 - shelter;
+    // no rain inside the grotto under the pool
+    visible *= smoothstep(uStopY - uPx * 30.0, uStopY, p0.y);
 
     vec2 dir = normalize(vec2(uWind, -1.0));
     vec2 perp = vec2(-dir.y, dir.x);
@@ -110,6 +114,7 @@ export default function Rain({ count }: { count: number }) {
       uUmb: { value: new THREE.Vector3(0, 0, 0) },
       uUmbShape: { value: new THREE.Vector2(1, 0.4) },
       uUmbTilt: { value: 0 },
+      uStopY: { value: -1e5 },
       uFlash: { value: 0 },
     }),
     [],
@@ -130,6 +135,9 @@ export default function Rain({ count }: { count: number }) {
     u.uUmbShape.value.set(umbrellaState.radius, umbrellaState.height);
     u.uUmbTilt.value = umbrellaState.tilt;
     u.uFlash.value = rainStore.flash;
+    // where the waterfalls start, in world y on the z = 0 plane
+    const stopPx = rainStore.streetTop + POOL_H - window.scrollY;
+    u.uStopY.value = Number.isFinite(stopPx) ? -(stopPx - size.height / 2) * k : -1e5;
   });
 
   return (
