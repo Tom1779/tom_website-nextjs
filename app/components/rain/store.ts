@@ -12,6 +12,8 @@ export const rainStore = {
     inside: false, // pointer is over the projects section
     planted: false, // touch devices: umbrella stays where it was tapped
     seen: false, // pointer has moved at least once
+    // index of the revealed (clickable) project the mouse is over, or -1
+    overLink: -1,
   },
   sectionEl: null as HTMLElement | null,
   panelEls: [] as (HTMLElement | null)[],
@@ -29,6 +31,8 @@ export const rainStore = {
   refogRequested: false,
   // 0..1 rain heaviness, driven by scroll progress
   intensity: 0.5,
+  // client-px y of the apartment building's roofline (NaN when not laid out yet)
+  roofY: NaN,
 };
 
 export type RainStore = typeof rainStore;

@@ -130,7 +130,7 @@ const glassFragment = /* glsl */ `
     // pane frame + faint diagonal sheen so the shape always reads
     vec2 edgePx = min(uv, 1.0 - uv) / uPx;
     float edge = min(edgePx.x, edgePx.y);
-    float frame = smoothstep(2.0, 0.0, edge) * 0.55 + smoothstep(14.0, 0.0, edge) * 0.08;
+    float frame = smoothstep(1.5, 0.0, edge) * 0.3 + smoothstep(14.0, 0.0, edge) * 0.06;
     float sheen = smoothstep(0.08, 0.0, abs(uv.x + uv.y - 1.25)) * 0.06;
 
     vec3 frameCol = mix(vec3(0.7, 0.8, 0.95), vec3(1.0, 0.82, 0.55), uShelter);
@@ -139,7 +139,7 @@ const glassFragment = /* glsl */ `
     float aFog = fogA;
     float aRim = rim * 0.22;
     float aSpec = spec * 0.7;
-    float aFrame = frame * (1.0 + uFlash + uShelter * 0.6) + sheen;
+    float aFrame = frame * (1.0 + uFlash + uShelter * 2.5) + sheen + smoothstep(16.0, 0.0, edge) * uShelter * 0.3;
 
     float alpha = clamp(aFog + aRim + aSpec + aFrame, 0.0, 1.0);
     vec3 col = fogCol * aFog + vec3(0.55, 0.65, 0.8) * aRim + vec3(1.0) * aSpec + frameCol * aFrame;
@@ -353,7 +353,8 @@ function Panel({ index, image, grid }: PanelProps) {
     const target = rainStore.dryness[index];
     // ease the shader value so drying looks smooth even when dryness jumps (reveal all / flash button)
     v.dry += (target - v.dry) * Math.min(1, dt * 5);
-    const sheltered = rainStore.sheltered === index ? 1 : 0;
+    // warm frame glow while sheltered, and while hovering a dry (clickable) window
+    const sheltered = rainStore.sheltered === index || rainStore.pointer.overLink === index ? 1 : 0;
     v.shelter += (sheltered - v.shelter) * Math.min(1, dt * 6);
 
     const t = state.clock.elapsedTime;

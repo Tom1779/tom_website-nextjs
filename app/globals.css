@@ -177,6 +177,11 @@ body {
   .umbrella-zone * {
     cursor: none;
   }
+  /* ...until a pane has dried: then it's a link, so show the hand */
+  .umbrella-zone a[data-revealed],
+  .umbrella-zone a[data-revealed] * {
+    cursor: pointer;
+  }
 }
 
 /* The rain canvas covers the page, so skip painting the beams behind it */

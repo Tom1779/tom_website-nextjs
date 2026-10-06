@@ -39,7 +39,7 @@ const vertexShader = /* glsl */ `
     float xAtRim = p0.x - uWind * (uUmb.y - p0.y) - uUmb.x;
     // canopy is tilted, so its top line leans with the tilt
     float r = max(uUmbShape.x, 1e-4);
-    float canopyTop = uUmb.y + uUmbShape.y * max(0.0, 1.0 - abs(xAtRim) / r) + xAtRim * sin(uUmbTilt);
+    float canopyTop = uUmb.y + uUmbShape.y * max(0.0, 1.0 - (xAtRim / r) * (xAtRim / r)) + xAtRim * sin(uUmbTilt);
     float under = step(abs(xAtRim), r * 0.97) * step(p0.y, canopyTop);
     float depthBelow = uUmb.y - p0.y;
     // shelter fades out far below the umbrella, as wind blows rain back in

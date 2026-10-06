@@ -18,6 +18,17 @@ export interface RainProject {
 type ViewMode = "rain" | "list";
 const STORAGE_KEY = "tom-site-view";
 
+/** Which revealed (clickable) project, if any, is under the mouse right now. */
+function refreshOverLink() {
+  const ptr = rainStore.pointer;
+  if (!ptr.seen || ptr.planted) {
+    ptr.overLink = -1;
+    return;
+  }
+  const link = document.elementFromPoint(ptr.x, ptr.y)?.closest("a[data-revealed]");
+  ptr.overLink = link ? Number(link.getAttribute("data-index")) : -1;
+}
+
 function supportsWebGL() {
   try {
     const c = document.createElement("canvas");
@@ -91,6 +102,7 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
       ptr.y = e.clientY;
       ptr.seen = true;
       updateInside();
+      refreshOverLink();
     };
 
     const onDown = (e: PointerEvent) => {
@@ -112,6 +124,7 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
 
     const onScroll = () => {
       updateInside();
+      refreshOverLink();
       updateIntensity();
     };
 
@@ -128,8 +141,14 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
       document.documentElement.removeEventListener("mouseleave", onLeave);
       ptr.inside = false;
       ptr.planted = false;
+      ptr.overLink = -1;
     };
   }, [mode]);
+
+  // A pane that just dried under the cursor becomes clickable straight away
+  useEffect(() => {
+    refreshOverLink();
+  }, [revealed]);
 
   const handleReveal = useCallback((i: number) => {
     setRevealed((prev) => {
@@ -157,7 +176,7 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
     <section className="relative w-full flex flex-col items-center" aria-labelledby="projects-heading">
       {showRain && ready && <RainScene images={items.map((p) => p.image)} onReveal={handleReveal} />}
 
-      <header className="w-full max-w-6xl px-4 pt-10 sm:pt-16 pb-8 text-center flex flex-col items-center gap-4">
+      <header className="w-full max-w-6xl px-4 pt-10 sm:pt-16 pb-28 sm:pb-32 text-center flex flex-col items-center gap-4">
         <p className="text-xs sm:text-sm tracking-[0.35em] uppercase text-sky-200/70">Software Engineer</p>
         <h1 className="text-4xl sm:text-6xl font-bold text-white drop-shadow-[0_2px_18px_rgba(120,160,255,0.35)]">
           Tom Arad
@@ -187,14 +206,13 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
                 <CloudLightning className="w-4 h-4" aria-hidden="true" />
                 Flash: show me everything
               </button>
-              {/* Always laid out (just hidden) so revealing a pane never shifts the grid under the umbrella */}
+              {/* Always laid out (dimmed until needed) so revealing a pane never shifts the grid under the umbrella */}
               <button
                 type="button"
                 onClick={refog}
                 disabled={!anyRevealed}
-                aria-hidden={!anyRevealed}
                 className={`inline-flex items-center gap-2 rounded-full border border-white/15 bg-slate-900/60 px-4 py-2 text-slate-200 backdrop-blur hover:bg-white/10 transition ${
-                  anyRevealed ? "visible opacity-100" : "invisible opacity-0"
+                  anyRevealed ? "opacity-100" : "opacity-40 cursor-not-allowed"
                 }`}
               >
                 <RotateCcw className="w-4 h-4" aria-hidden="true" />
@@ -234,6 +252,8 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
             return (
               <li key={item.title} className="flex flex-col">
                 <a
+                  data-index={i}
+                  data-revealed={isOpen ? "" : undefined}
                   href={item.url ?? "#"}
                   target={external ? "_blank" : undefined}
                   rel={external ? "noopener noreferrer" : undefined}
@@ -271,14 +291,13 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
                       isOpen ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
                     }`}
                   >
-                    <h3 className="text-sm sm:text-base font-semibold text-white leading-snug">{item.title}</h3>
+                    <h3 className="text-sm sm:text-base font-semibold text-white leading-snug transition-colors group-hover:text-amber-100">
+                      {item.title}
+                    </h3>
                     <p className="mt-1 text-xs sm:text-sm text-slate-300 font-sans leading-relaxed line-clamp-3">
                       {item.subtitle}
                     </p>
-                    <p className="mt-2 text-xs font-sans text-sky-300/90 flex items-center gap-2">
-                      {item.handle && <span>{item.handle}</span>}
-                      <span className="opacity-0 group-hover:opacity-100 transition-opacity">Open →</span>
-                    </p>
+                    {item.handle && <p className="mt-2 text-xs font-sans text-sky-300/90">{item.handle}</p>}
                   </div>
                 </a>
               </li>

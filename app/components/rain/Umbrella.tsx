@@ -8,6 +8,8 @@ import { pxToWorld, worldPerPixel } from "./quality";
 
 const UMB_Z = 3;
 const RIBS = 8;
+// Shaft length from grip to canopy rim, in canopy radii
+const SHAFT = 0.95;
 
 /** Live umbrella state, read by Rain (shelter) and Panels (drying). */
 export const umbrellaState = {
@@ -24,50 +26,142 @@ export const umbrellaState = {
   radiusPx: 80,
 };
 
-function buildCanopy() {
-  const height = 0.42;
-  const geo = new THREE.ConeGeometry(1, height, RIBS * 2, 1, true);
-  // Scallop the rim: vertices between ribs sag inward and up
-  const pos = geo.getAttribute("position") as THREE.BufferAttribute;
-  const step = (Math.PI * 2) / (RIBS * 2);
-  for (let i = 0; i < pos.count; i++) {
-    const y = pos.getY(i);
-    if (Math.abs(y + height / 2) > 1e-4) continue;
-    const x = pos.getX(i);
-    const z = pos.getZ(i);
-    const a = Math.atan2(z, x);
-    const idx = Math.round(a / step);
-    if (Math.abs(idx) % 2 === 1) {
-      pos.setXYZ(i, x * 0.9, y + 0.07, z * 0.9);
-    }
-  }
-  const flat = geo.toNonIndexed();
-  geo.dispose();
+const PHI_MAX = 1.12; // how far the dome extends from the tip, in radians
 
-  // Alternate panel colours by angle
-  const p = flat.getAttribute("position") as THREE.BufferAttribute;
-  const colors = new Float32Array(p.count * 3);
-  const a = new THREE.Color("#c0283a");
-  const b = new THREE.Color("#7e1424");
-  for (let t = 0; t < p.count; t += 3) {
-    const cx = (p.getX(t) + p.getX(t + 1) + p.getX(t + 2)) / 3;
-    const cz = (p.getZ(t) + p.getZ(t + 1) + p.getZ(t + 2)) / 3;
-    const ang = Math.atan2(cz, cx) + Math.PI;
-    const seg = Math.floor((ang / (Math.PI * 2)) * RIBS) % 2;
-    const c = seg === 0 ? a : b;
-    for (let v = 0; v < 3; v++) {
-      colors[(t + v) * 3] = c.r;
-      colors[(t + v) * 3 + 1] = c.g;
-      colors[(t + v) * 3 + 2] = c.b;
-    }
-  }
-  flat.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-  flat.computeVertexNormals();
-  return { geo: flat, height };
+/** Point on the dome (rim radius 1, rim at y = 0) for u = 0 at the tip .. 1 at the rim. */
+function domePoint(u: number, theta: number, out = new THREE.Vector3()) {
+  const rimR = Math.sin(PHI_MAX);
+  const phi = u * PHI_MAX;
+  // between ribs the fabric edge lifts slightly, giving the scalloped rim
+  const scallop = 1 - Math.abs(Math.cos((theta * RIBS) / 2));
+  const y = Math.cos(phi) - Math.cos(PHI_MAX) + 0.08 * scallop * u ** 4;
+  const r = Math.sin(phi) * (1 - 0.03 * scallop * u);
+  return out.set((r * Math.cos(theta)) / rimR, y / rimR, (r * Math.sin(theta)) / rimR);
 }
 
-// Shaft length from grip to canopy rim, in canopy radii
-const SHAFT = 1.05;
+function buildCanopy() {
+  const segT = 64;
+  const segU = 20;
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  const v = new THREE.Vector3();
+  for (let iu = 0; iu <= segU; iu++) {
+    const u = iu / segU;
+    for (let it = 0; it <= segT; it++) {
+      const theta = (it / segT) * Math.PI * 2;
+      domePoint(u, theta, v);
+      positions.push(v.x, v.y, v.z);
+      uvs.push(it / segT, u);
+    }
+  }
+  for (let iu = 0; iu < segU; iu++) {
+    for (let it = 0; it < segT; it++) {
+      const a = iu * (segT + 1) + it;
+      const b = a + segT + 1;
+      indices.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  const height = (1 - Math.cos(PHI_MAX)) / Math.sin(PHI_MAX);
+  return { geo, height };
+}
+
+/** Thin struts from the runner on the shaft out to each rib, like a real umbrella frame. */
+function buildStruts(runnerY: number) {
+  const pts: number[] = [];
+  const v = new THREE.Vector3();
+  for (let i = 0; i < RIBS; i++) {
+    domePoint(0.62, (i / RIBS) * Math.PI * 2, v);
+    pts.push(0, runnerY, 0, v.x, v.y, v.z);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+  return geo;
+}
+
+const canopyVertex = /* glsl */ `
+  varying vec3 vN;
+  varying vec3 vV;
+  varying vec2 vUv;
+  void main() {
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vV = -mv.xyz;
+    vN = normalize(normalMatrix * normal);
+    vUv = uv;
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+
+// Clear vinyl: mostly see-through, brighter at grazing angles, white ribs and rim, beaded with rain.
+const canopyFragment = /* glsl */ `
+  uniform float uTime;
+  uniform float uFlash;
+  uniform float uRain;
+  uniform float uBack;
+  varying vec3 vN;
+  varying vec3 vV;
+  varying vec2 vUv;
+
+  float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+
+  void main() {
+    vec3 N = normalize(vN);
+    if (!gl_FrontFacing) N = -N;
+    vec3 V = normalize(vV);
+    float ndv = abs(dot(N, V));
+    float fres = pow(1.0 - ndv, 3.0);
+
+    float u = vUv.y;
+    float theta = vUv.x * 6.2831853;
+    float rimR = sin(${PHI_MAX.toFixed(4)});
+    float r = sin(u * ${PHI_MAX.toFixed(4)}) / rimR; // distance from the shaft, in canopy radii
+
+    // ribs: white lines along each seam
+    float seg = 6.2831853 / ${RIBS.toFixed(1)};
+    float dTheta = abs(mod(theta + seg * 0.5, seg) - seg * 0.5);
+    float rib = 1.0 - smoothstep(0.008, 0.02, dTheta * r);
+    // rim piping
+    float rim = smoothstep(0.955, 0.985, u);
+
+    // raindrops: beads that land, sit, then slide off
+    vec2 q = vec2(theta * r * 2.2, u * 2.0) * 9.0;
+    vec2 id = floor(q);
+    vec2 f = fract(q) - 0.5;
+    float n = hash(id);
+    float cyc = fract(uTime * (0.25 + 0.35 * n) * (0.6 + uRain) + n * 13.0);
+    vec2 c = vec2((fract(n * 31.7) - 0.5) * 0.5, (fract(n * 7.3) - 0.5) * 0.4 + smoothstep(0.7, 1.0, cyc) * 0.9);
+    float rad = mix(0.1, 0.24, fract(n * 91.3));
+    float alive = step(0.35, n) * smoothstep(0.0, 0.08, cyc) * (1.0 - smoothstep(0.85, 1.0, cyc));
+    vec2 d = f - c;
+    float bead = smoothstep(rad, rad * 0.55, length(d)) * alive;
+    float beadHi = smoothstep(rad * 0.5, 0.0, length(d + vec2(rad * 0.35, -rad * 0.35))) * alive;
+
+    // specular sheen from a soft light up and to the left
+    vec3 L = normalize(vec3(-0.4, 0.85, 0.5));
+    float spec = pow(max(dot(N, normalize(L + V)), 0.0), 48.0);
+
+    float aBase = 0.05 + fres * 0.45;
+    float aBead = bead * 0.28 + beadHi * 0.6;
+    float aRib = rib * 0.7;
+    float aRim = rim * 0.85;
+    float aSpec = spec * 0.55;
+    float alpha = aBase + aBead + aRib + aRim + aSpec;
+
+    vec3 col = vec3(0.75, 0.85, 0.95) * aBase + vec3(0.85, 0.92, 1.0) * aBead
+             + vec3(0.95) * (aRib + aRim) + vec3(1.0) * aSpec;
+    col /= max(alpha, 0.001);
+    col += vec3(0.4, 0.45, 0.6) * uFlash;
+    alpha = clamp(alpha * (1.0 + uFlash) * uBack, 0.0, 1.0);
+    gl_FragColor = vec4(col, alpha);
+  }
+`;
+
+const RUNNER_Y = 0.55; // runner position up the shaft (canopy radii above the grip)
 
 export default function Umbrella({ splashCount }: { splashCount: number }) {
   const size = useThree((s) => s.size);
@@ -75,8 +169,26 @@ export default function Umbrella({ splashCount }: { splashCount: number }) {
   const canopyRef = useRef<THREE.Group>(null);
   const sim = useRef({ x: -9999, y: -9999, vx: 0, vy: 0, tilt: 0, vtilt: 0, init: false });
 
+  const backMat = useRef<THREE.ShaderMaterial>(null);
+  const frontMat = useRef<THREE.ShaderMaterial>(null);
+
   const canopy = useMemo(buildCanopy, []);
-  useEffect(() => () => canopy.geo.dispose(), [canopy]);
+  const struts = useMemo(() => buildStruts(RUNNER_Y - SHAFT), []);
+  useEffect(
+    () => () => {
+      canopy.geo.dispose();
+      struts.dispose();
+    },
+    [canopy, struts],
+  );
+  const backUniforms = useMemo(
+    () => ({ uTime: { value: 0 }, uFlash: { value: 0 }, uRain: { value: 0.5 }, uBack: { value: 0.6 } }),
+    [],
+  );
+  const frontUniforms = useMemo(
+    () => ({ uTime: { value: 0 }, uFlash: { value: 0 }, uRain: { value: 0.5 }, uBack: { value: 1 } }),
+    [],
+  );
 
   // Splash particle pool (positions in client px, converted to world each frame)
   const splash = useMemo(() => {
@@ -104,7 +216,8 @@ export default function Umbrella({ splashCount }: { splashCount: number }) {
     const radiusPx = size.width < 768 ? 62 : 82;
     umbrellaState.radiusPx = radiusPx;
 
-    const active = ptr.planted || (ptr.inside && ptr.seen);
+    // Over a pane that's already dry (clickable), the umbrella folds away and the hand cursor shows
+    const active = ptr.planted || (ptr.inside && ptr.seen && ptr.overLink < 0);
     const tx = ptr.x;
     const ty = ptr.planted ? ptr.docY - window.scrollY : ptr.y;
 
@@ -158,7 +271,14 @@ export default function Umbrella({ splashCount }: { splashCount: number }) {
     }
     if (canopyRef.current) {
       const open = umbrellaState.open;
-      canopyRef.current.scale.set(0.2 + 0.8 * open, 1 + (1 - open) * 1.6, 0.2 + 0.8 * open);
+      canopyRef.current.scale.set(0.15 + 0.85 * open, 1 + (1 - open) * 1.4, 0.15 + 0.85 * open);
+    }
+    // R3F copies uniform values into the material, so update them through the material itself
+    for (const m of [backMat.current, frontMat.current]) {
+      if (!m) continue;
+      m.uniforms.uTime.value = state.clock.elapsedTime;
+      m.uniforms.uFlash.value = rainStore.flash;
+      m.uniforms.uRain.value = rainStore.intensity;
     }
 
     // --- Splashes off the canopy ---
@@ -170,7 +290,7 @@ export default function Umbrella({ splashCount }: { splashCount: number }) {
       const i = sp.cursor;
       sp.cursor = (sp.cursor + 1) % sp.n;
       const lx = (Math.random() * 2 - 1) * radiusPx * 0.95;
-      const ly = SHAFT * radiusPx + canopy.height * radiusPx * (1 - Math.abs(lx) / radiusPx);
+      const ly = SHAFT * radiusPx + canopy.height * radiusPx * (1 - (lx / radiusPx) ** 2);
       const ct = Math.cos(s.tilt);
       const st = Math.sin(s.tilt);
       sp.px[i * 2] = s.x + (lx * ct - ly * st);
@@ -200,43 +320,73 @@ export default function Umbrella({ splashCount }: { splashCount: number }) {
     posAttr.needsUpdate = true;
   });
 
-  const shaftLen = SHAFT + canopy.height;
+  const top = SHAFT + canopy.height;
+  // bamboo nodes along the shaft
+  const nodes = [0.42, 0.78, 1.14, 1.5].filter((y) => y < top - 0.05);
 
   return (
     <>
-      <group ref={outer} renderOrder={10}>
+      <group ref={outer}>
         {/* lean the canopy toward the camera so a bit of the top shows */}
-        <group rotation={[0.38, 0, 0]}>
-          <group ref={canopyRef} position={[0, SHAFT + canopy.height / 2, 0]}>
-            <mesh geometry={canopy.geo}>
-              <meshStandardMaterial
-                vertexColors
-                flatShading
-                roughness={0.45}
-                metalness={0.05}
-                side={THREE.DoubleSide}
+        <group rotation={[0.3, 0, 0]}>
+          {/* bamboo shaft */}
+          <mesh position={[0, (top + 0.05) / 2 - 0.05, 0]}>
+            <cylinderGeometry args={[0.024, 0.026, top + 0.05, 10]} />
+            <meshStandardMaterial color="#d2b47c" roughness={0.55} />
+          </mesh>
+          {nodes.map((y) => (
+            <mesh key={y} position={[0, y, 0]}>
+              <cylinderGeometry args={[0.031, 0.031, 0.022, 10]} />
+              <meshStandardMaterial color="#a8854e" roughness={0.6} />
+            </mesh>
+          ))}
+          {/* grip end */}
+          <mesh position={[0, -0.06, 0]}>
+            <cylinderGeometry args={[0.03, 0.028, 0.03, 10]} />
+            <meshStandardMaterial color="#8f6d3d" roughness={0.6} />
+          </mesh>
+          {/* runner and tip */}
+          <mesh position={[0, RUNNER_Y, 0]}>
+            <cylinderGeometry args={[0.036, 0.036, 0.09, 10]} />
+            <meshStandardMaterial color="#eef0f2" roughness={0.4} />
+          </mesh>
+          <mesh position={[0, top + 0.06, 0]}>
+            <cylinderGeometry args={[0.012, 0.02, 0.12, 8]} />
+            <meshStandardMaterial color="#f2f2f4" roughness={0.3} />
+          </mesh>
+
+          <group ref={canopyRef} position={[0, SHAFT, 0]}>
+            <lineSegments geometry={struts} renderOrder={9}>
+              <lineBasicMaterial color="#ffffff" transparent opacity={0.55} depthWrite={false} />
+            </lineSegments>
+            {/* inside surface first, then the outside, so the clear vinyl blends in order */}
+            <mesh geometry={canopy.geo} renderOrder={10}>
+              <shaderMaterial
+                ref={backMat}
+                vertexShader={canopyVertex}
+                fragmentShader={canopyFragment}
+                uniforms={backUniforms}
+                side={THREE.BackSide}
+                transparent
+                depthWrite={false}
+              />
+            </mesh>
+            <mesh geometry={canopy.geo} renderOrder={11}>
+              <shaderMaterial
+                ref={frontMat}
+                vertexShader={canopyVertex}
+                fragmentShader={canopyFragment}
+                uniforms={frontUniforms}
+                side={THREE.FrontSide}
+                transparent
+                depthWrite={false}
               />
             </mesh>
           </group>
-          {/* shaft */}
-          <mesh position={[0, shaftLen / 2, 0]}>
-            <cylinderGeometry args={[0.022, 0.022, shaftLen, 8]} />
-            <meshStandardMaterial color="#c9c9cf" metalness={0.6} roughness={0.35} />
-          </mesh>
-          {/* tip */}
-          <mesh position={[0, shaftLen + 0.07, 0]}>
-            <cylinderGeometry args={[0.012, 0.03, 0.14, 8]} />
-            <meshStandardMaterial color="#d8d8de" metalness={0.6} roughness={0.3} />
-          </mesh>
-          {/* J handle */}
-          <mesh position={[-0.13, 0, 0]} rotation={[0, 0, Math.PI]}>
-            <torusGeometry args={[0.13, 0.035, 8, 20, Math.PI]} />
-            <meshStandardMaterial color="#5a3a26" roughness={0.6} />
-          </mesh>
         </group>
       </group>
 
-      <points geometry={splash.geo} frustumCulled={false} renderOrder={11}>
+      <points geometry={splash.geo} frustumCulled={false} renderOrder={12}>
         <pointsMaterial
           color="#bcd2ef"
           size={2.4}

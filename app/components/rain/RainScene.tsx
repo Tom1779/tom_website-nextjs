@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import City from "./City";
+import Facade from "./Facade";
 import Rain from "./Rain";
 import Panels from "./Panels";
 import Umbrella from "./Umbrella";
@@ -39,6 +40,7 @@ export default function RainScene({ images, onReveal }: RainSceneProps) {
         <directionalLight position={[-4, 8, 10]} intensity={1.6} color="#dfe7ff" />
         <City />
         <Lightning />
+        <Facade count={images.length} />
         <Panels images={images} grid={quality.grid} onReveal={onReveal} />
         <Rain count={quality.drops} />
         <Umbrella splashCount={quality.splashes} />
