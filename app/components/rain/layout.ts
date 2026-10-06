@@ -43,9 +43,12 @@ function mulberry32(seed: number) {
   };
 }
 
-/** Height of the city container: the first screen under the navbar. */
-export function cityHeight(vw: number, vh: number) {
-  return Math.round(Math.min(Math.max(vh - 64, vw < 640 ? 640 : 600), 960));
+export const STREET_FADE = 130; // bottom px where the buildings dissolve into the street
+
+/** Height of the city container: at least the first screen, tall enough for two storeys of big windows. */
+export function cityHeight(vw: number, vh: number, skyTop: number) {
+  const need = skyTop + (vw < 640 ? 640 : 520);
+  return Math.round(Math.min(Math.max(vh - 64, need), 1200));
 }
 
 /**
@@ -57,26 +60,26 @@ export function computeCityLayout(width: number, height: number, count: number, 
   const medium = width < 1100;
 
   // close enough to see the frost, drips and the project inside each window
-  const win = small ? { w: 40, h: 52 } : medium ? { w: 52, h: 68 } : { w: 60, h: 78 };
-  const gap = { x: Math.round(win.w * 0.42), y: Math.round(win.h * 0.45) };
-  const pad = { x: Math.round(win.w * 0.45), top: Math.round(win.h * 0.7) };
+  const win = small ? { w: 52, h: 68 } : medium ? { w: 70, h: 90 } : { w: 84, h: 108 };
+  const gap = { x: Math.round(win.w * 0.36), y: Math.round(win.h * 0.4) };
+  const pad = { x: Math.round(win.w * 0.42), top: Math.round(win.h * 0.55) };
   const stepX = win.w + gap.x;
   const stepY = win.h + gap.y;
 
   // a few big foreground buildings; the shader fills in a hazier mid-ground row behind them
-  const nb = Math.min(MAX_BUILDINGS, small ? 3 : 4);
+  const nb = Math.min(MAX_BUILDINGS, small ? 2 : 3);
   const cap = Math.ceil(count / nb);
   const slot = width / nb;
-  const fade = 150; // bottom px that dissolve into street haze; keep projects above it
+  const fade = STREET_FADE; // keep projects above the street haze
 
   const buildings: Building[] = [];
   for (let i = 0; i < nb; i++) {
-    const target = slot * (0.72 + rand() * 0.22);
+    const target = slot * (0.8 + rand() * 0.15);
     const cols = Math.max(2, Math.floor((target - pad.x * 2 + gap.x) / stepX));
     const w = cols * stepX - gap.x + pad.x * 2;
     const jitter = (slot - w) * (rand() - 0.5) * 0.8;
     const x = Math.round(i * slot + (slot - w) / 2 + jitter);
-    const top = Math.round(skyTop + rand() * (height - skyTop) * 0.3);
+    const top = Math.round(skyTop + rand() * (height - skyTop) * 0.1);
     const rows = Math.max(3, Math.floor((height - top - pad.top) / stepY));
     buildings.push({ x, top, w, depth: rand() * 0.4, cols, rows });
   }
@@ -97,11 +100,11 @@ export function computeCityLayout(width: number, height: number, count: number, 
   const windows: ProjectWindow[] = [];
   const slotsFor: { building: number; x: number; y: number }[] = [];
   buildings.forEach((b, bi) => {
-    const lastRow = Math.max(1, Math.floor((height - fade - b.top - pad.top - win.h) / stepY));
+    const lastRow = Math.max(0, Math.floor((height - fade - b.top - pad.top - win.h) / stepY));
     const used: [number, number][] = [];
     // every window above the street haze, in a seeded random order
     const cells: [number, number][] = [];
-    for (let row = 1; row <= lastRow; row++) for (let col = 0; col < b.cols; col++) cells.push([row, col]);
+    for (let row = 0; row <= lastRow; row++) for (let col = 0; col < b.cols; col++) cells.push([row, col]);
     for (let i = cells.length - 1; i > 0; i--) {
       const j = Math.floor(rand() * (i + 1));
       [cells[i], cells[j]] = [cells[j], cells[i]];

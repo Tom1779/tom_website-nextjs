@@ -4,13 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { rainStore, MAX_PROJECTS } from "./store";
-import { MAX_BUILDINGS } from "./layout";
+import { MAX_BUILDINGS, STREET_FADE } from "./layout";
 import { pxToWorld, worldPerPixel } from "./quality";
 import { umbrellaState, SHAFT } from "./Umbrella";
 
 const DRY_SECONDS = 1.0; // time under the umbrella to fully dry a window
 const REFOG_SECONDS = 6.0; // a partly-dried window fogs back up this slowly
-const STREET_FADE = 160; // px at the bottom where the city dissolves into haze
 const TILE = 256; // atlas tile size per project image
 const BG = [11, 18, 32]; // backdrop behind each project image
 
@@ -468,6 +467,8 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
     m.visible = visible;
     // the distant skyline rises from just behind the mid-ground row
     s.roofY = rect.top + L.skyTop + (L.height - L.skyTop) * 0.2;
+    // the wet street picks up where the buildings start to dissolve
+    s.streetTop = rect.top + window.scrollY + L.height - STREET_FADE;
     if (!visible) return;
     const k = worldPerPixel(size.height, 0);
     const [cx, cy] = pxToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2, size.width, size.height, 0);

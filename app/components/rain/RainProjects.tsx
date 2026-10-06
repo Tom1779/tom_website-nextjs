@@ -25,13 +25,13 @@ const HIT = 8; // px of forgiveness around each small project window
 const shortTitle = (t: string) => t.replace(/\s*\(.*?\)\s*/g, " ").trim();
 
 /** Centre a window's name tag under it, but pin it inside the city near the screen edges. */
-function tagStyle(w: { x: number; y: number; w: number; h: number }, width: number) {
+function tagStyle(w: { x: number; y: number; w: number; h: number }, width: number, maxW: number) {
   const cx = w.x + w.w / 2;
-  const top = w.y + w.h + 10;
-  const edge = 90; // roughly half of the longest tag
-  if (cx < edge) return { left: Math.max(4, w.x - 6), top };
-  if (cx > width - edge) return { right: Math.max(4, width - (w.x + w.w + 6)), top };
-  return { left: cx, top, transform: "translateX(-50%)" };
+  const top = w.y + w.h + 8;
+  const half = maxW / 2;
+  // never wider than its column, so neighbouring tags can't overlap; pinned inside the city at the edges
+  const left = Math.max(4, Math.min(cx - half, width - maxW - 4));
+  return { left, top, width: maxW };
 }
 
 /** Which revealed (clickable) project, if any, is under the mouse right now. */
@@ -103,9 +103,9 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
     if (!el) return;
     let lastKey = "";
     const update = () => {
-      const h = cityHeight(window.innerWidth, window.innerHeight);
       // the header floats in the sky; buildings start just under it
-      const skyTop = (headerRef.current?.offsetHeight ?? 0) + 16;
+      const skyTop = (headerRef.current?.offsetHeight ?? 0) + 12;
+      const h = cityHeight(window.innerWidth, window.innerHeight, skyTop);
       const key = `${el.clientWidth}x${h}x${skyTop}`;
       if (key === lastKey) return;
       lastKey = key;
@@ -145,10 +145,25 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
     const updateIntensity = () => {
       const max = document.documentElement.scrollHeight - window.innerHeight;
       const progress = max > 0 ? Math.min(1, window.scrollY / max) : 0;
-      rainStore.intensity = 0.4 + 0.6 * progress;
+      rainStore.intensity = 0.4 + 0.3 * progress; // heavier as you scroll, but keep the content readable
+    };
+
+    // ripples follow the cursor through the street puddles below the city
+    let lastRipple = { x: 0, y: 0, t: 0 };
+    const addRipple = (x: number, docY: number) => {
+      const now = performance.now() / 1000;
+      if (!(docY > rainStore.streetTop)) return;
+      if (now - lastRipple.t < 0.09 && Math.hypot(x - lastRipple.x, docY - lastRipple.y) < 40) return;
+      lastRipple = { x, y: docY, t: now };
+      const r = rainStore.ripples[rainStore.rippleNext];
+      r.x = x;
+      r.y = docY;
+      r.t = now;
+      rainStore.rippleNext = (rainStore.rippleNext + 1) % rainStore.ripples.length;
     };
 
     const onMove = (e: PointerEvent) => {
+      addRipple(e.clientX, e.clientY + window.scrollY);
       if (e.pointerType === "touch") return;
       ptr.planted = false;
       ptr.x = e.clientX;
@@ -160,6 +175,7 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
 
     const onDown = (e: PointerEvent) => {
       lastPointerType.current = e.pointerType;
+      addRipple(e.clientX, e.clientY + window.scrollY);
       if (e.pointerType !== "touch") return;
       const el = cityRef.current;
       if (!el || !el.contains(e.target as Node)) return;
@@ -292,7 +308,7 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
 
       <header
         ref={headerRef}
-        className="relative z-20 w-full max-w-6xl px-4 pt-10 sm:pt-16 pb-6 text-center flex flex-col items-center gap-4"
+        className="relative z-20 w-full max-w-6xl px-4 pt-10 pb-4 text-center flex flex-col items-center gap-3"
       >
         <p className="text-xs sm:text-sm tracking-[0.35em] uppercase text-sky-200/70">Software Engineer</p>
         <h1 className="text-4xl sm:text-6xl font-bold text-white drop-shadow-[0_2px_18px_rgba(120,160,255,0.35)]">
@@ -412,12 +428,14 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
                     {/* name tag hung under a window once it's dry */}
                     <span
                       aria-hidden="true"
-                      style={tagStyle(w, layout.width)}
-                      className={`pointer-events-none absolute whitespace-nowrap rounded-full border border-amber-200/40 bg-slate-950/85 px-2 py-0.5 font-sans text-[10px] sm:text-[11px] text-amber-100 shadow-[0_0_12px_rgba(255,190,110,0.25)] transition-opacity duration-500 ${
+                      style={tagStyle(w, layout.width, layout.win.w + layout.gap.x - 6)}
+                      className={`pointer-events-none absolute flex justify-center text-center font-sans text-[10px] leading-tight sm:text-[11px] text-amber-100 transition-opacity duration-500 ${
                         isOpen ? "opacity-100" : "opacity-0"
                       }`}
                     >
-                      {shortTitle(item.title)}
+                      <span className="rounded-md border border-amber-200/40 bg-slate-950/85 px-1.5 py-0.5 shadow-[0_0_12px_rgba(255,190,110,0.25)]">
+                        {shortTitle(item.title)}
+                      </span>
                     </span>
                   </li>
                 );
