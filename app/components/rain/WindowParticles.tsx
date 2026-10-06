@@ -29,7 +29,7 @@ const vertexShader = /* glsl */ `
     vec2 target = vec2(aTarget.x, aTarget.y * uTileY);
     vec2 pos = mix(aScatter + drift, target, t);
     vColor = aColor;
-    vAlpha = mix(0.42, 1.0, t) * uFade;
+    vAlpha = mix(0.9, 1.0, t) * uFade; // behind the frosted glass now, so they can be bright
     gl_PointSize = uSize * mix(1.25, 1.05, t);
     gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 0.01, 1.0);
   }
