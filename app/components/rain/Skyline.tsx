@@ -255,7 +255,7 @@ const fragmentShader = /* glsl */ `
       if (uAtlasReady > 0.5 && tuv.y >= 0.0 && tuv.y <= 1.0) {
         poster = texture2D(uAtlas, vec2((PS.w + clamp(tuv.x, 0.002, 0.998)) / uTiles, 1.0 - tuv.y)).rgb;
       }
-      float show = max(smoothstep(0.55, 1.0, dry), uFlash * 0.85);
+      float show = max(smoothstep(0.86, 1.0, dry), uFlash * 0.85);
       vec3 inner = mix(room, poster, show);
 
       // frost clears in patches
@@ -356,7 +356,6 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
   const size = useThree((s) => s.size);
   const [atlas, setAtlas] = useState<THREE.CanvasTexture | null>(null);
   const glow = useRef(new Float32Array(MAX_PROJECTS));
-  const shown = useRef(new Float32Array(MAX_PROJECTS));
   const imagesKey = images.join("|");
 
   useEffect(() => {
@@ -492,9 +491,9 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
       const hot = s.sheltered === i || s.pointer.overLink === i ? 1 : 0;
       glow.current[i] += (hot - glow.current[i]) * Math.min(1, dt * 8);
       // ease the visual dryness so jumps (flash / reveal all) still animate
-      shown.current[i] += (s.dryness[i] - shown.current[i]) * Math.min(1, dt * 5);
+      s.shown[i] += (s.dryness[i] - s.shown[i]) * Math.min(1, dt * 5);
       u.uProj.value[i].set(w.x, w.y, w.w, w.h);
-      u.uProjS.value[i].set(shown.current[i], glow.current[i], s.revealed[i], w.project);
+      u.uProjS.value[i].set(s.shown[i], glow.current[i], s.revealed[i], w.project);
     }
     u.uProjN.value = n;
     u.uAtlas.value = atlas;

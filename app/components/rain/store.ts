@@ -21,6 +21,8 @@ export const rainStore = {
   cityEl: null as HTMLElement | null,
   layout: null as CityLayout | null,
   dryness: new Float32Array(MAX_PROJECTS),
+  // eased dryness actually shown on screen (shared by the window shader and its pixel cloud)
+  shown: new Float32Array(MAX_PROJECTS),
   // Windows that have fully dried stay revealed
   revealed: new Uint8Array(MAX_PROJECTS),
   // Click-to-dry boost per window (decays)

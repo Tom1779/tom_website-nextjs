@@ -5,7 +5,8 @@ import { Canvas } from "@react-three/fiber";
 import City from "./City";
 import Rain from "./Rain";
 import Skyline from "./Skyline";
-import Street from "./Street";
+import Waterfalls from "./Waterfalls";
+import WindowParticles from "./WindowParticles";
 import Umbrella from "./Umbrella";
 import Lightning from "./Lightning";
 import { CAMERA_FOV, CAMERA_Z, getRainQuality, type RainQuality } from "./quality";
@@ -40,8 +41,9 @@ export default function RainScene({ images, onReveal }: RainSceneProps) {
         <directionalLight position={[-4, 8, 10]} intensity={1.6} color="#dfe7ff" />
         <City />
         <Lightning />
-        <Street />
+        <Waterfalls />
         <Skyline images={images} onReveal={onReveal} />
+        <WindowParticles images={images} />
         <Rain count={quality.drops} />
         <Umbrella splashCount={quality.splashes} />
       </Canvas>
