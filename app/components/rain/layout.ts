@@ -25,6 +25,7 @@ export interface ProjectWindow {
 export interface CityLayout {
   width: number;
   height: number;
+  skyTop: number; // px reserved for the header; buildings rise from just below it
   win: { w: number; h: number };
   gap: { x: number; y: number };
   pad: { x: number; top: number };
@@ -55,13 +56,16 @@ export function computeCityLayout(width: number, height: number, count: number, 
   const small = width < 640;
   const medium = width < 1100;
 
-  const win = small ? { w: 22, h: 30 } : medium ? { w: 30, h: 40 } : { w: 36, h: 48 };
-  const gap = { x: Math.round(win.w * 0.5), y: Math.round(win.h * 0.55) };
-  const pad = { x: Math.round(win.w * 0.55), top: Math.round(win.h * 0.8) };
+  // close enough to see the frost, drips and the project inside each window
+  const win = small ? { w: 40, h: 52 } : medium ? { w: 52, h: 68 } : { w: 60, h: 78 };
+  const gap = { x: Math.round(win.w * 0.42), y: Math.round(win.h * 0.45) };
+  const pad = { x: Math.round(win.w * 0.45), top: Math.round(win.h * 0.7) };
   const stepX = win.w + gap.x;
   const stepY = win.h + gap.y;
 
-  const nb = Math.min(MAX_BUILDINGS, Math.max(small ? 4 : medium ? 5 : 6, Math.ceil(count / 2)));
+  // a few big foreground buildings; the shader fills in a hazier mid-ground row behind them
+  const nb = Math.min(MAX_BUILDINGS, small ? 3 : 4);
+  const cap = Math.ceil(count / nb);
   const slot = width / nb;
   const fade = 150; // bottom px that dissolve into street haze; keep projects above it
 
@@ -74,17 +78,17 @@ export function computeCityLayout(width: number, height: number, count: number, 
     const x = Math.round(i * slot + (slot - w) / 2 + jitter);
     const top = Math.round(skyTop + rand() * (height - skyTop) * 0.3);
     const rows = Math.max(3, Math.floor((height - top - pad.top) / stepY));
-    buildings.push({ x, top, w, depth: rand(), cols, rows });
+    buildings.push({ x, top, w, depth: rand() * 0.4, cols, rows });
   }
 
-  // Spread projects: one per building, extras go to the widest buildings (max two each)
+  // Spread projects: one per building, extras go to the widest buildings (evenly capped)
   const perBuilding = new Array(nb).fill(0);
   for (let p = 0; p < count; p++) {
     if (p < nb) {
       perBuilding[p % nb]++;
     } else {
       const order = [...buildings.keys()].sort((a, b) => buildings[b].w - buildings[a].w);
-      const target = order.find((b) => perBuilding[b] < 2) ?? order[0];
+      const target = order.find((b) => perBuilding[b] < cap) ?? order[0];
       perBuilding[target]++;
     }
   }
@@ -124,6 +128,7 @@ export function computeCityLayout(width: number, height: number, count: number, 
   return {
     width,
     height,
+    skyTop,
     win,
     gap,
     pad,

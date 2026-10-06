@@ -35,8 +35,7 @@ const fragmentShader = /* glsl */ `
     float h = baseH + hash(id + seed) * varH;
     // occasional tall towers
     h += step(0.86, hash(id * 3.1 + seed)) * varH * 0.9;
-    // only above the roofline: below it is the apartment block (or, once it scrolls away, open haze)
-    float inside = step(uv.y, h) * step(0.0, uv.y);
+    float inside = step(uv.y, h);
     // windows
     vec2 w = vec2(fract(x) * 6.0, uv.y * density * 9.0);
     vec2 wid = floor(w);
@@ -46,7 +45,9 @@ const fragmentShader = /* glsl */ `
     // a few windows flicker
     float flick = 0.75 + 0.25 * sin(uTime * (0.5 + hash2(wid + id) * 2.0) + id);
     float edge = step(0.08, fract(x)) * step(fract(x), 0.92);
-    return vec2(inside, inside * frame * lit * edge * flick * step(uv.y, h - 0.012));
+    // windows fade out below the horizon, where the city sinks into haze
+    float fadeLow = smoothstep(-0.12, 0.04, uv.y);
+    return vec2(inside, inside * frame * lit * edge * flick * step(uv.y, h - 0.012) * fadeLow);
   }
 
   void main() {
@@ -66,16 +67,18 @@ const fragmentShader = /* glsl */ `
 
     // far layer
     vec2 far = skyline(suv + vec2(0.0, uScroll * 0.01), 14.0, 0.22, 0.2, 3.0);
-    col = mix(col, vec3(0.03, 0.045, 0.075), far.x * 0.9);
-    col += vec3(0.55, 0.42, 0.25) * far.y * 0.25;
+    col = mix(col, vec3(0.055, 0.07, 0.102), far.x * 0.9);
+    col += vec3(0.55, 0.42, 0.25) * far.y * 0.2;
 
     // near layer
     vec2 nearL = skyline(suv + vec2(0.37, uScroll * 0.02), 7.0, 0.1, 0.18, 11.0);
-    col = mix(col, vec3(0.012, 0.018, 0.03), nearL.x);
-    col += vec3(0.9, 0.7, 0.45) * nearL.y * 0.35;
+    col = mix(col, vec3(0.045, 0.058, 0.088), nearL.x);
+    col += vec3(0.9, 0.7, 0.45) * nearL.y * 0.28;
 
     // rain haze
-    col = mix(col, vec3(0.07, 0.09, 0.13), 0.22 * smoothstep(0.45, 0.0, hy));
+    col = mix(col, vec3(0.065, 0.08, 0.115), 0.22 * smoothstep(0.45, 0.0, hy));
+    // below the horizon everything dissolves into the same haze the foreground fades into
+    col = mix(col, vec3(0.065, 0.08, 0.115), smoothstep(0.0, -0.25, hy) * 0.85);
 
     // lightning lights the sky from above
     col += vec3(0.55, 0.6, 0.85) * uFlash * (0.25 + 0.75 * vUv.y) * (1.0 - nearL.x * 0.85);

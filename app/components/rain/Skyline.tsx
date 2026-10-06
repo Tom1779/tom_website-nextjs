@@ -22,12 +22,13 @@ const vertexShader = /* glsl */ `
   }
 `;
 
-// Draws every foreground building and its windows in container px, the same space the DOM uses,
-// so the project windows line up with their link hit-areas exactly.
+// Draws the mid-ground row and every foreground building with its windows in container px, the same
+// space the DOM uses, so the project windows line up with their link hit-areas exactly.
 const fragmentShader = /* glsl */ `
   #define MAXB ${MAX_BUILDINGS}
   #define MAXP ${MAX_PROJECTS}
   uniform vec2 uSize;
+  uniform float uSkyTop;
   uniform vec2 uWin;
   uniform vec2 uGap;
   uniform vec2 uPad;
@@ -54,10 +55,40 @@ const fragmentShader = /* glsl */ `
     for (int i = 0; i < 4; i++) { v += a * vnoise(p); p *= 2.03; a *= 0.5; }
     return v;
   }
+  float box(vec2 p, vec2 lo, vec2 hi) { return step(lo.x, p.x) * step(p.x, hi.x) * step(lo.y, p.y) * step(p.y, hi.y); }
 
-  const vec3 FRAME = vec3(0.05, 0.055, 0.07);
-  const vec3 HAZE = vec3(0.06, 0.075, 0.11);
+  // one palette for every layer so the foreground melts into the distant skyline
+  const vec3 FRAME = vec3(0.03, 0.035, 0.05);
+  const vec3 HAZE = vec3(0.065, 0.08, 0.115);
   const vec3 AMBER = vec3(1.0, 0.68, 0.32);
+
+  // ---- mid-ground: a row of hazier, smaller-windowed buildings behind the foreground ----
+  vec4 midLayer(vec2 p) {
+    float colW = uWin.x * 2.8;
+    float sx = p.x + 41.0;
+    float id = floor(sx / colW);
+    float lx = sx - id * colW;
+    if (hash(vec2(id, 3.1)) < 0.14) return vec4(0.0); // a gap where the far skyline shows
+    float inset = 3.0 + colW * 0.12 * step(0.55, hash(vec2(id, 5.0)));
+    if (lx < inset || lx > colW - inset) return vec4(0.0);
+    float top = uSkyTop + 20.0 + hash(vec2(id, 7.0)) * (uSize.y - uSkyTop) * 0.22;
+    if (p.y < top) return vec4(0.0);
+
+    vec3 col = vec3(0.04, 0.052, 0.078) * mix(0.85, 1.15, hash(vec2(id, 9.0)));
+    vec2 mw = uWin * 0.3;
+    vec2 st = mw + mw * vec2(0.55, 0.6);
+    vec2 q = vec2(lx - inset - mw.x * 0.5, p.y - top - mw.y * 0.6);
+    vec2 c = floor(q / st);
+    vec2 wp = q - c * st;
+    float inW = step(0.0, q.x) * step(0.0, q.y) * step(wp.x, mw.x) * step(wp.y, mw.y) * step(q.x + mw.x * 1.4, colW - 2.0 * inset);
+    float lit = step(0.78, hash(c + id * 13.7));
+    vec3 wc = lit > 0.5 ? mix(AMBER, vec3(1.0, 0.85, 0.6), hash(c + id)) * 0.38 : vec3(0.03, 0.038, 0.056);
+    col = mix(col, wc, inW);
+    // haze thickens toward the street
+    col = mix(col, HAZE, 0.5 + 0.3 * smoothstep(top, uSize.y, p.y));
+    col += vec3(0.25, 0.28, 0.4) * uFlash * 0.3;
+    return vec4(col, 1.0);
+  }
 
   // An ordinary apartment window: lit, TV-lit or dark, with a balcony rail
   vec3 apartment(vec2 wp, vec2 id) {
@@ -65,31 +96,70 @@ const fragmentShader = /* glsl */ `
     float h = hash(id);
     vec3 col;
     if (h > 0.64) {
-      vec3 lc = mix(AMBER, vec3(1.0, 0.86, 0.62), hash(id + 3.0)) * mix(0.55, 1.0, hash(id + 4.0));
+      vec3 lc = mix(AMBER, vec3(1.0, 0.86, 0.62), hash(id + 3.0)) * mix(0.5, 0.95, hash(id + 4.0));
       col = lc * (0.6 + 0.4 * (1.0 - u.y));
-      if (hash(id + 8.0) > 0.7) col *= 0.7 + 0.3 * step(0.45, fract(u.y * 7.0)); // blinds
-      if (hash(id + 9.0) > 0.65) col = mix(col, vec3(0.3, 0.09, 0.06), smoothstep(0.2, 0.16, u.x)); // curtain
+      if (hash(id + 8.0) > 0.7) col *= 0.7 + 0.3 * step(0.45, fract(u.y * 9.0)); // blinds
+      if (hash(id + 9.0) > 0.65) col = mix(col, vec3(0.3, 0.09, 0.06), smoothstep(0.22, 0.17, u.x)); // curtain
+      // someone's silhouette now and then
+      if (hash(id + 21.0) > 0.85) {
+        float x = mix(0.35, 0.7, hash(id + 22.0));
+        float body = box(u, vec2(x - 0.07, 0.42), vec2(x + 0.07, 1.0));
+        float head = 1.0 - smoothstep(0.065, 0.08, length((u - vec2(x, 0.34)) * vec2(1.0, uWin.y / uWin.x)));
+        col = mix(col, vec3(0.04, 0.03, 0.03), max(body, head));
+      }
     } else if (h > 0.6) {
       float flick = 0.6 + 0.4 * sin(uTime * 7.0 + h * 50.0) * sin(uTime * 3.1 + h * 20.0);
       col = vec3(0.12, 0.2, 0.42) * flick;
     } else {
-      col = vec3(0.025, 0.032, 0.05) + vec3(0.03, 0.035, 0.05) * (1.0 - u.y);
-      col += vec3(0.05, 0.06, 0.08) * smoothstep(0.06, 0.0, abs(u.x - u.y * 0.5 - 0.2));
+      col = vec3(0.02, 0.026, 0.04) + vec3(0.025, 0.03, 0.045) * (1.0 - u.y);
+      col += vec3(0.045, 0.055, 0.075) * smoothstep(0.05, 0.0, abs(u.x - u.y * 0.5 - 0.2));
     }
     // balcony glass + rail
-    float glassB = step(0.66, u.y);
-    col = mix(col, col * 0.65 + vec3(0.015, 0.02, 0.03), glassB * 0.5);
-    col = mix(col, FRAME * 1.8, 1.0 - step(1.0, abs(wp.y - uWin.y * 0.66)));
+    float glassB = step(0.68, u.y);
+    col = mix(col, col * 0.65 + vec3(0.012, 0.016, 0.026), glassB * 0.5);
+    col = mix(col, FRAME * 2.2, 1.0 - step(1.2, abs(wp.y - uWin.y * 0.68)));
     // frame + mullion
     float edge = min(min(wp.x, uWin.x - wp.x), min(wp.y, uWin.y - wp.y));
-    float mull = (1.0 - step(0.8, abs(wp.x - uWin.x * 0.6))) * (1.0 - glassB);
-    return mix(col, FRAME, max(1.0 - step(1.5, edge), mull));
+    float mull = (1.0 - step(1.0, abs(wp.x - uWin.x * 0.6))) * (1.0 - glassB);
+    return mix(col, FRAME, max(1.0 - step(2.0, edge), mull));
+  }
+
+  // Water tanks and antennas (with a blinking light) on top of the foreground buildings
+  vec4 roofProps(vec2 p, vec4 b) {
+    float seed = hash(vec2(b.x, b.z));
+    vec4 o = vec4(0.0);
+    vec3 dark = vec3(0.07, 0.085, 0.12); // same tone as the buildings so props read against the sky
+    if (hash(vec2(seed, 1.0)) > 0.4) {
+      float tw = uWin.x * 0.6;
+      float th = uWin.y * 0.38;
+      float tx = b.x + b.z * mix(0.25, 0.7, hash(vec2(seed, 2.0)));
+      float base = b.y - 8.0;
+      float body = box(p, vec2(tx, base - th), vec2(tx + tw, base));
+      float roof = step(base - th - tw * 0.3, p.y) * step(p.y, base - th) * step(abs(p.x - tx - tw * 0.5), (p.y - (base - th - tw * 0.3)) / 0.6);
+      float legs = step(base, p.y) * step(p.y, b.y) * (box(p, vec2(tx + 2.0, base), vec2(tx + 4.0, b.y)) + box(p, vec2(tx + tw - 4.0, base), vec2(tx + tw - 2.0, b.y)));
+      float m = clamp(body + roof + legs, 0.0, 1.0);
+      vec3 c = dark * (1.0 + 0.6 * (1.0 - step(2.0, p.x - tx))); // lit left edge
+      c *= 0.9 + 0.2 * step(0.5, fract((p.x - tx) / 5.0)); // slats
+      o = mix(o, vec4(c, 1.0), m);
+    }
+    if (hash(vec2(seed, 3.0)) > 0.35) {
+      float ax = b.x + b.z * mix(0.12, 0.88, hash(vec2(seed, 4.0)));
+      float ah = uWin.y * mix(0.6, 1.1, hash(vec2(seed, 5.0)));
+      float mast = step(abs(p.x - ax), 0.9) * step(b.y - ah, p.y) * step(p.y, b.y);
+      o = mix(o, vec4(dark * 1.4, 1.0), mast);
+      float blink = step(0.55, sin(uTime * 2.2 + seed * 40.0));
+      float dist = length(p - vec2(ax, b.y - ah));
+      float light = (1.0 - smoothstep(2.0, 3.0, dist)) + exp(-dist / 5.0) * 0.6;
+      o.rgb += vec3(1.0, 0.15, 0.1) * light * blink;
+      o.a = max(o.a, min(1.0, light * blink));
+    }
+    return o;
   }
 
   void main() {
     vec2 p = vec2(vUv.x * uSize.x, (1.0 - vUv.y) * uSize.y);
 
-    // nearest building covering this pixel (array is sorted far -> near)
+    // nearest foreground building covering this pixel (array is sorted far -> near)
     vec4 B = vec4(-1.0);
     for (int i = 0; i < MAXB; i++) {
       if (i >= uBldN) break;
@@ -97,16 +167,16 @@ const fragmentShader = /* glsl */ `
       if (p.x >= b.x && p.x < b.x + b.z && p.y >= b.y) B = b;
     }
 
-    vec4 outCol = vec4(0.0);
+    vec4 outCol = midLayer(p);
     if (B.z > 0.0) {
       vec2 lp = p - B.xy;
       float seed = hash(vec2(B.x, B.z));
-      vec3 col = mix(vec3(0.095, 0.11, 0.145), vec3(0.14, 0.15, 0.19), seed) * mix(0.85, 1.05, vnoise(p * 0.03));
-      col *= mix(0.75, 1.0, vnoise(vec2(p.x * 0.06, p.y * 0.005)));
-      col += vec3(0.02, 0.03, 0.045) * smoothstep(0.6, 0.9, vnoise(vec2(p.x * 0.08, p.y * 0.015 - uTime * 0.6)));
-      // lit left edge, shaded right edge, parapet
-      col *= 1.0 + 0.3 * (1.0 - step(2.0, lp.x)) - 0.3 * step(B.z - 3.0, lp.x);
-      col = mix(col, col * 1.6, 1.0 - step(5.0, lp.y));
+      vec3 col = mix(vec3(0.055, 0.068, 0.1), vec3(0.085, 0.098, 0.135), seed) * mix(0.85, 1.08, vnoise(p * 0.03));
+      col *= mix(0.78, 1.0, vnoise(vec2(p.x * 0.06, p.y * 0.005)));
+      col += vec3(0.02, 0.028, 0.042) * smoothstep(0.6, 0.9, vnoise(vec2(p.x * 0.08, p.y * 0.015 - uTime * 0.6)));
+      // lit left edge, shaded right edge, parapet cap
+      col *= 1.0 + 0.35 * (1.0 - step(2.0, lp.x)) - 0.35 * step(B.z - 3.0, lp.x);
+      col = mix(col, col * 1.7, 1.0 - step(5.0, lp.y));
 
       vec2 stepPx = uWin + uGap;
       vec2 wl = lp - uPad;
@@ -117,74 +187,120 @@ const fragmentShader = /* glsl */ `
       if (inGrid > 0.5 && wp.x < uWin.x && wp.y < uWin.y) {
         col = apartment(wp, cell + seed * 97.0);
       } else if (step(0.0, cell.y) > 0.5 && lp.x > 2.0 && lp.x < B.z - 3.0) {
-        // floor slab line between storeys
-        float sy = wp.y - uWin.y - uGap.y * 0.35;
-        col = mix(col, col * 1.55, step(0.0, sy) * (1.0 - step(2.5, sy)));
+        // floor slab between storeys, with a little rain-shadow under it
+        float sy = wp.y - uWin.y - uGap.y * 0.3;
+        col = mix(col, col * 1.6, step(0.0, sy) * (1.0 - step(3.0, sy)));
+        col *= 1.0 - 0.25 * step(3.0, sy) * (1.0 - smoothstep(3.0, 10.0, sy));
       }
 
-      // atmospheric perspective: farther buildings sink into the rain haze
-      col = mix(col, HAZE, B.w * 0.45);
+      // atmospheric perspective
+      col = mix(col, HAZE, B.w * 0.4);
       col += vec3(0.3, 0.33, 0.45) * uFlash * (0.5 - B.w * 0.2);
       outCol = vec4(col, 1.0);
+    } else {
+      // rooftop props: find the building whose roof this pixel is above, then draw once
+      vec4 RB = vec4(-1.0);
+      for (int i = 0; i < MAXB; i++) {
+        if (i >= uBldN) break;
+        vec4 b = uBld[i];
+        if (p.x >= b.x - 8.0 && p.x < b.x + b.z + 8.0 && p.y < b.y && p.y > b.y - uWin.y * 1.3) RB = b;
+      }
+      if (RB.z > 0.0) {
+        vec4 prop = roofProps(p, RB);
+        prop.rgb = mix(prop.rgb, HAZE, RB.w * 0.4);
+        outCol = mix(outCol, vec4(prop.rgb, 1.0), prop.a);
+      }
     }
 
-    // project windows: frosted glowing panes that clear as they dry
+    // project windows: a light pass finds which window (if any) this pixel is in and adds the halos;
+    // the expensive frost shading then runs once, outside the loop (keeps the shader compilable on D3D)
+    int pj = -1;
+    vec4 PR = vec4(0.0);
+    vec4 PS = vec4(0.0);
+    vec3 glowAdd = vec3(0.0);
+    float glowA = 0.0;
+    float barMix = 0.0;
     for (int j = 0; j < MAXP; j++) {
       if (j >= uProjN) break;
       vec4 r = uProj[j];
       vec4 S = uProjS[j];
       vec2 d = p - r.xy;
-      float inside = step(0.0, d.x) * step(d.x, r.z) * step(0.0, d.y) * step(d.y, r.w);
-      if (inside > 0.5) {
-        vec2 u = d / r.zw;
-        float dry = S.x;
-        vec3 room = vec3(1.0, 0.8, 0.52) * (0.75 + 0.25 * (1.0 - u.y));
-        // the project's image hangs inside the room, fitted to the window width
-        vec3 bg = vec3(${BG.map((c) => (c / 255).toFixed(4)).join(", ")});
-        vec3 poster = bg;
-        vec2 tuv = vec2(u.x, (d.y - (r.w - r.z) * 0.5) / r.z);
-        if (uAtlasReady > 0.5 && tuv.y >= 0.0 && tuv.y <= 1.0) {
-          poster = texture2D(uAtlas, vec2((S.w + clamp(tuv.x, 0.002, 0.998)) / uTiles, 1.0 - tuv.y)).rgb;
-        }
-        float show = max(smoothstep(0.55, 1.0, dry), uFlash * 0.85);
-        vec3 inner = mix(room, poster, show);
-
-        // frost clears in patches, with beads of rain on it
-        float f = fbm(u * vec2(2.2, 2.9) + float(j) * 3.7);
-        float evap = clamp((fbm(u * 1.7 - float(j)) - (dry * 1.35 - 0.2)) / 0.18, 0.0, 1.0);
-        vec2 bq = d / 5.0;
-        float bn = hash(floor(bq) + float(j));
-        float bead = step(0.7, bn) * (1.0 - smoothstep(0.18, 0.32, length(fract(bq) - 0.5)));
-        float fogA = mix(0.72, 0.94, f) * evap * (1.0 - bead * 0.6) * (1.0 - uFlash * 0.75);
-        // cool blue-white frost, unlike the amber rooms around it, so it reads as "something to dry"
-        vec3 frost = vec3(0.82, 0.9, 1.0) * (0.85 + 0.12 * sin(uTime * 1.6 + float(j) * 1.3));
-        vec3 col = mix(inner, frost, fogA);
-        col += vec3(1.0) * bead * 0.12 * (1.0 - dry);
-
-        // balcony rail and frame (frame glows amber when sheltered or hovered)
-        col = mix(col, FRAME * 1.8, 1.0 - step(1.0, abs(d.y - r.w * 0.66)));
-        float edge = min(min(d.x, r.z - d.x), min(d.y, r.w - d.y));
-        col = mix(col, mix(FRAME, AMBER, S.y), 1.0 - step(1.5 + S.y, edge));
-        outCol = vec4(col, 1.0);
+      if (d.x >= 0.0 && d.x <= r.z && d.y >= 0.0 && d.y <= r.w) {
+        pj = j;
+        PR = r;
+        PS = S;
       } else {
+        float dist = length(max(max(-d, d - r.zw), 0.0));
         // amber halo around a sheltered / hovered window
-        vec2 o = max(max(-d, d - r.zw), 0.0);
-        float dist = length(o);
-        float halo = S.y * exp(-dist / 7.0) * step(dist, 30.0);
+        float halo = S.y * exp(-dist / 8.0) * step(dist, 34.0);
         // frosted windows give off a soft, slowly pulsing glow until they're dried
-        float frostHalo = (1.0 - S.z) * (1.0 - S.x) * (0.3 + 0.12 * sin(uTime * 1.6 + float(j) * 1.3)) * exp(-dist / 9.0) * step(dist, 40.0);
-        outCol.rgb += AMBER * halo * 0.5 + vec3(0.6, 0.75, 1.0) * frostHalo;
-        outCol.a = max(outCol.a, max(halo * 0.6, frostHalo));
+        float frostHalo = (1.0 - S.z) * (1.0 - S.x) * (0.28 + 0.12 * sin(uTime * 1.6 + float(j) * 1.3)) * exp(-dist / 11.0) * step(dist, 46.0);
+        glowAdd += AMBER * halo * 0.5 + vec3(0.6, 0.75, 1.0) * frostHalo;
+        glowA = max(glowA, max(halo * 0.6, frostHalo));
         // drying progress under the window
-        float bar = step(r.y + r.w + 4.0, p.y) * step(p.y, r.y + r.w + 6.0) * step(r.x, p.x) * step(p.x, r.x + r.z * S.x);
-        float showBar = bar * step(0.001, S.x) * (1.0 - S.z);
-        outCol = mix(outCol, vec4(1.0, 0.85, 0.55, 1.0), showBar);
+        float bar = step(r.y + r.w + 5.0, p.y) * step(p.y, r.y + r.w + 8.0) * step(r.x, p.x) * step(p.x, r.x + r.z * S.x);
+        barMix = max(barMix, bar * step(0.001, S.x) * (1.0 - S.z));
       }
     }
 
+    if (pj >= 0) {
+      vec2 PD = p - PR.xy;
+      vec2 u = PD / PR.zw;
+      float dry = PS.x;
+      float fj = float(pj);
+      vec3 room = vec3(1.0, 0.8, 0.52) * (0.7 + 0.3 * (1.0 - u.y));
+      // the project's image hangs inside the room, fitted to the window width
+      vec3 bg = vec3(${BG.map((c) => (c / 255).toFixed(4)).join(", ")});
+      vec3 poster = bg;
+      vec2 tuv = vec2(u.x, (PD.y - (PR.w - PR.z) * 0.5) / PR.z);
+      if (uAtlasReady > 0.5 && tuv.y >= 0.0 && tuv.y <= 1.0) {
+        poster = texture2D(uAtlas, vec2((PS.w + clamp(tuv.x, 0.002, 0.998)) / uTiles, 1.0 - tuv.y)).rgb;
+      }
+      float show = max(smoothstep(0.55, 1.0, dry), uFlash * 0.85);
+      vec3 inner = mix(room, poster, show);
+
+      // frost clears in patches
+      float f = fbm(u * vec2(2.4, 3.1) + fj * 3.7 + vec2(0.0, uTime * 0.03));
+      float evap = clamp((fbm(u * 1.8 - fj) - (dry * 1.35 - 0.2)) / 0.18, 0.0, 1.0);
+      float fogA = mix(0.7, 0.94, f) * evap;
+
+      // beads of condensation
+      vec2 bq = PD / 6.0;
+      float bn = hash(floor(bq) + fj);
+      float bead = step(0.68, bn) * (1.0 - smoothstep(0.16, 0.3, length(fract(bq) - 0.5 - (vec2(bn, fract(bn * 7.3)) - 0.5) * 0.3)));
+      // a few drips sliding down, wiping clear trails
+      float drip = 0.0;
+      float trail = 0.0;
+      for (int k = 0; k < 3; k++) {
+        float fk = float(k);
+        float hk = hash(vec2(fj, fk));
+        float x0 = PR.z * (0.18 + 0.32 * fk) + sin(PD.y * 0.15 + hk * 6.0) * 1.5;
+        float y0 = mod(uTime * PR.w * (0.12 + 0.12 * hk) + hk * PR.w * 2.0, PR.w * 1.6) - PR.w * 0.3;
+        drip = max(drip, 1.0 - smoothstep(1.6, 2.6, length(vec2(PD.x - x0, (PD.y - y0) * 0.8))));
+        trail = max(trail, (1.0 - smoothstep(0.6, 1.4, abs(PD.x - x0))) * step(PD.y, y0) * (1.0 - smoothstep(0.0, PR.w * 0.45, y0 - PD.y)));
+      }
+      float wet = 1.0 - dry;
+      fogA *= (1.0 - bead * 0.55 * wet) * (1.0 - trail * 0.75 * wet) * (1.0 - drip * 0.8 * wet) * (1.0 - uFlash * 0.75);
+
+      // cool blue-white frost, unlike the amber rooms around it, so it reads as "something to dry"
+      vec3 frost = vec3(0.8, 0.88, 1.0) * (0.84 + 0.12 * sin(uTime * 1.6 + fj * 1.3));
+      vec3 col = mix(inner, frost, fogA);
+      col += vec3(1.0) * (bead * 0.12 + drip * 0.35) * wet;
+
+      // balcony rail and frame (frame glows amber when sheltered or hovered)
+      col = mix(col, FRAME * 2.2, 1.0 - step(1.2, abs(PD.y - PR.w * 0.68)));
+      float edge = min(min(PD.x, PR.z - PD.x), min(PD.y, PR.w - PD.y));
+      col = mix(col, mix(FRAME, AMBER, PS.y), 1.0 - step(2.0 + PS.y, edge));
+      outCol = vec4(col, 1.0);
+    } else {
+      outCol.rgb += glowAdd;
+      outCol.a = max(outCol.a, glowA);
+      outCol = mix(outCol, vec4(1.0, 0.85, 0.55, 1.0), barMix);
+    }
+
     // street-level haze, then fade out entirely
-    float street = smoothstep(uSize.y - ${(STREET_FADE + 120).toFixed(1)}, uSize.y, p.y);
-    outCol.rgb = mix(outCol.rgb, HAZE * 1.2, street * 0.7 * outCol.a);
+    float street = smoothstep(uSize.y - ${(STREET_FADE + 140).toFixed(1)}, uSize.y, p.y);
+    outCol.rgb = mix(outCol.rgb, HAZE * 1.15, street * 0.75 * outCol.a);
     outCol.a *= 1.0 - smoothstep(uSize.y - ${STREET_FADE.toFixed(1)}, uSize.y, p.y);
     gl_FragColor = outCol;
   }
@@ -261,6 +377,7 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
   const uniforms = useMemo(
     () => ({
       uSize: { value: new THREE.Vector2(1, 1) },
+      uSkyTop: { value: 0 },
       uWin: { value: new THREE.Vector2(1, 1) },
       uGap: { value: new THREE.Vector2(1, 1) },
       uPad: { value: new THREE.Vector2(1, 1) },
@@ -349,9 +466,8 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
     // ---- place the city plane exactly over the container ----
     const visible = rect.bottom > 0 && rect.top < size.height;
     m.visible = visible;
-    // the distant skyline sits a little below the foreground rooftops
-    const lowestRoof = L.buildings.reduce((m, b) => Math.max(m, b.top), 0);
-    s.roofY = rect.top + lowestRoof + 40;
+    // the distant skyline rises from just behind the mid-ground row
+    s.roofY = rect.top + L.skyTop + (L.height - L.skyTop) * 0.2;
     if (!visible) return;
     const k = worldPerPixel(size.height, 0);
     const [cx, cy] = pxToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2, size.width, size.height, 0);
@@ -360,6 +476,7 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
 
     // ---- uniforms (through the material: R3F copies uniform values) ----
     u.uSize.value.set(L.width, L.height);
+    u.uSkyTop.value = L.skyTop;
     u.uWin.value.set(L.win.w, L.win.h);
     u.uGap.value.set(L.gap.x, L.gap.y);
     u.uPad.value.set(L.pad.x, L.pad.top);
