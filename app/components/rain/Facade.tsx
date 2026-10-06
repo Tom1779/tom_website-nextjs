@@ -8,7 +8,7 @@ import { pxToWorld, worldPerPixel } from "./quality";
 
 // Sits behind the scattered image particles (which reach z ≈ -1.35) so they float "inside" the rooms
 const FACADE_Z = -1.6;
-const ROOF_ABOVE = 70; // px of wall + cornice above the first row of windows
+const ROOF_ABOVE = 70; // px of wall + parapet above the first row of windows
 const BELOW = 150; // px of wall under the last row (captions sit here)
 const FADE = 220; // px the building fades out over at the bottom
 
@@ -20,13 +20,14 @@ const vertexShader = /* glsl */ `
   }
 `;
 
-// Everything is computed in client px so the window lattice lines up with the DOM panes exactly.
+// Modern apartment tower (slate concrete grid, balconies, warm rooms). Everything is computed in
+// client px so the lattice lines up with the DOM panes exactly.
 const fragmentShader = /* glsl */ `
   uniform vec4 uRect;    // facade left, top, width, height (px)
   uniform vec2 uOrigin;  // top-left of the first project pane (px)
   uniform vec2 uWin;     // pane size (px)
   uniform vec2 uPitch;   // lattice spacing (px)
-  uniform float uMargin; // frame + sill size (px)
+  uniform float uMargin; // half the gap between panes (px): the structural columns
   uniform float uCols;
   uniform float uRows;
   uniform float uCount;
@@ -40,112 +41,138 @@ const fragmentShader = /* glsl */ `
     f = f * f * (3.0 - 2.0 * f);
     return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
   }
+  float box(vec2 p, vec2 lo, vec2 hi) { return step(lo.x, p.x) * step(p.x, hi.x) * step(lo.y, p.y) * step(p.y, hi.y); }
+  float disc(vec2 p, vec2 c, float r) { return 1.0 - smoothstep(r - 0.8, r + 0.8, length(p - c)); }
 
   float rowOk(float cy) { return step(-0.5, cy) * step(cy, uRows - 0.5); }
   float isProject(vec2 c) {
     return step(-0.5, c.x) * step(c.x, uCols - 0.5) * step(c.y * uCols + c.x, uCount - 0.5) * rowOk(c.y);
   }
-  // how strongly a window's room light spills onto the wall
-  float roomLight(vec2 c) {
-    float h = hash(c + 7.0);
-    return rowOk(c.y) * max(isProject(c), step(0.5, h) * 0.7);
+
+  const vec3 FRAME = vec3(0.055, 0.06, 0.075);
+  const vec3 SLAB = vec3(0.2, 0.22, 0.27);
+
+  vec3 litColor(vec2 id) {
+    return mix(vec3(1.0, 0.64, 0.28), vec3(1.0, 0.85, 0.6), hash(id + 3.0)) * mix(0.75, 1.05, hash(id + 4.0));
+  }
+
+  // One apartment unit. p is px inside the glazing (0,0 = top-left), s its size.
+  vec3 unit(vec2 p, vec2 s, vec2 id) {
+    vec2 u = p / s;
+    float h = hash(id);
+    float lit = step(0.6, h);
+    vec3 col;
+    if (lit > 0.5) {
+      vec3 lc = litColor(id);
+      col = lc * (0.5 + 0.45 * (1.0 - u.y));
+      col += lc * 0.35 * exp(-length((u - vec2(0.5, 0.06)) * vec2(1.4, 3.0)) * 2.5); // ceiling light
+    } else {
+      col = vec3(0.03, 0.04, 0.065) + vec3(0.03, 0.04, 0.06) * (1.0 - u.y);
+      col += vec3(0.05, 0.06, 0.08) * smoothstep(0.05, 0.0, abs(u.x - u.y * 0.45 - 0.25));
+    }
+    float base = s.y * 0.985;
+
+    // a person on some lit balconies
+    if (lit > 0.5 && hash(id + 21.0) > 0.84) {
+      float H = s.y * 0.5;
+      float x = s.x * mix(0.3, 0.7, hash(id + 22.0));
+      float body = box(p, vec2(x - H * 0.1, base - H * 0.8), vec2(x + H * 0.1, base));
+      body = max(body, disc(p, vec2(x, base - H * 0.8), H * 0.1));
+      float head = disc(p, vec2(x, base - H * 0.98), H * 0.09);
+      float torso = step(base - H * 0.8, p.y) * step(p.y, base - H * 0.4) * body;
+      vec3 shirt = hash(id + 23.0) > 0.6 ? vec3(0.6, 0.1, 0.07) : vec3(0.05, 0.04, 0.04);
+      col = mix(col, vec3(0.04, 0.035, 0.035), max(head, body));
+      col = mix(col, shirt, torso);
+    }
+
+    // a potted plant on some balconies
+    if (hash(id + 11.0) > 0.55) {
+      float x = s.x * mix(0.15, 0.85, hash(id + 5.0));
+      float r = s.y * mix(0.09, 0.13, hash(id + 6.0));
+      float pot = box(p, vec2(x - r * 0.55, base - r * 0.9), vec2(x + r * 0.55, base));
+      float leaves = max(max(disc(p, vec2(x, base - r * 1.9), r), disc(p, vec2(x - r * 0.7, base - r * 1.4), r * 0.75)),
+                         disc(p, vec2(x + r * 0.7, base - r * 1.5), r * 0.7));
+      vec3 green = lit > 0.5 ? vec3(0.07, 0.13, 0.05) : vec3(0.08, 0.17, 0.08);
+      col = mix(col, green, leaves);
+      col = mix(col, lit > 0.5 ? vec3(0.08, 0.07, 0.07) : vec3(0.45, 0.45, 0.47), pot);
+    }
+
+    // glass balustrade + rails across the lower part
+    float rail = s.y * 0.68;
+    float glassB = step(rail, p.y);
+    col = mix(col, col * 0.7 + vec3(0.02, 0.025, 0.04), glassB * 0.45);
+    float bars = (1.0 - step(2.0, abs(p.y - rail))) + (1.0 - step(0.8, abs(p.y - (rail + (base - rail) * 0.5))));
+    col = mix(col, FRAME * 1.6, clamp(bars, 0.0, 1.0));
+
+    // window frame and mullion
+    float edge = min(min(p.x, s.x - p.x), min(p.y, s.y - p.y));
+    float mull = 1.0 - step(1.2, abs(p.x - s.x * 0.62));
+    col = mix(col, FRAME, max(1.0 - step(2.5, edge), mull * (1.0 - glassB)));
+    return col;
   }
 
   void main() {
     vec2 p = vec2(uRect.x + vUv.x * uRect.z, uRect.y + (1.0 - vUv.y) * uRect.w);
 
-    // ---- wet brick wall ----
-    vec2 bsz = vec2(30.0, 12.0);
-    float brow = floor(p.y / bsz.y);
-    vec2 bp = vec2(p.x / bsz.x + mod(brow, 2.0) * 0.5, p.y / bsz.y);
-    vec2 bid = floor(bp);
-    vec2 bf = fract(bp);
-    float mpx = min(min(bf.x, 1.0 - bf.x) * bsz.x, min(bf.y, 1.0 - bf.y) * bsz.y);
-    float mortar = 1.0 - smoothstep(0.5, 1.4, mpx);
-    vec3 brick = mix(vec3(0.13, 0.075, 0.065), vec3(0.19, 0.11, 0.085), hash(bid));
-    vec3 wall = mix(brick, vec3(0.06, 0.06, 0.065), mortar);
-    // rain-darkened streaks and a slow sheen of water running down
-    wall *= mix(0.65, 1.0, vnoise(vec2(p.x * 0.035, p.y * 0.004)));
-    wall += vec3(0.03, 0.04, 0.055) * smoothstep(0.55, 0.9, vnoise(vec2(p.x * 0.05, p.y * 0.012 - uTime * 0.6)));
+    // slate concrete, darkened by rain, with water sheeting down it
+    vec3 col = vec3(0.12, 0.135, 0.17) * mix(0.8, 1.05, vnoise(p * 0.02));
+    col *= mix(0.75, 1.0, vnoise(vec2(p.x * 0.05, p.y * 0.004)));
+    col += vec3(0.02, 0.03, 0.045) * smoothstep(0.6, 0.9, vnoise(vec2(p.x * 0.06, p.y * 0.012 - uTime * 0.6)));
 
-    // ---- window lattice ----
     vec2 rel = p - uOrigin + uMargin;
     vec2 cell = floor(rel / uPitch);
-    vec2 lp = rel - cell * uPitch - uMargin; // pane occupies [0, uWin]
+    vec2 lp = rel - cell * uPitch - uMargin; // project pane occupies [0, uWin]
     float ok = rowOk(cell.y);
     float proj = isProject(cell);
-    vec2 wuv = lp / uWin;
-    float inWin = ok * step(0.0, lp.x) * step(lp.x, uWin.x) * step(0.0, lp.y) * step(lp.y, uWin.y);
 
-    // warm light spilling from nearby rooms (check neighbours so it doesn't cut off at cell edges)
-    float glow = 0.0;
-    for (int dy = -1; dy <= 1; dy++) {
-      for (int dx = -1; dx <= 1; dx++) {
-        vec2 c = cell + vec2(float(dx), float(dy));
-        vec2 l = rel - c * uPitch - uMargin;
-        vec2 o = max(max(-l, l - uWin), 0.0);
-        glow += exp(-length(o) / 28.0) * roomLight(c);
-      }
-    }
-    vec3 warm = vec3(1.0, 0.62, 0.3);
-    vec3 col = wall + warm * glow * 0.09 * (1.0 - inWin);
+    // structural columns between lattice columns (lighter, with a shaded edge)
+    float inCol = 1.0 - step(0.0, lp.x) * step(lp.x, uWin.x);
+    float colDist = lp.x < 0.0 ? -lp.x : lp.x - uWin.x;
+    vec3 column = vec3(0.16, 0.18, 0.225) * (0.85 + 0.15 * smoothstep(0.0, uMargin, colDist));
+    col = mix(col, column, inCol);
 
-    // frame, lintel, sill
-    vec2 o = max(-lp, lp - uWin);
-    float od = max(o.x, o.y);
-    float fw = uMargin * 0.55;
-    float frame = ok * (1.0 - inWin) * step(od, fw);
-    float spanX = step(-uMargin, lp.x) * step(lp.x, uWin.x + uMargin);
-    float sill = ok * spanX * step(uWin.y + fw * 0.6, lp.y) * step(lp.y, uWin.y + uMargin);
-    float sillShadow = ok * spanX * step(uWin.y + uMargin, lp.y) * (1.0 - smoothstep(0.0, 26.0, lp.y - uWin.y - uMargin));
-    float lintel = ok * step(-uMargin * 1.3, lp.y) * step(lp.y, -fw) * step(-uMargin * 0.7, lp.x) * step(lp.x, uWin.x + uMargin * 0.7);
-
-    vec3 stone = vec3(0.36, 0.34, 0.32);
-    col = mix(col, stone * 0.55 + warm * glow * 0.05, lintel);
-    col *= 1.0 - sillShadow * 0.55;
-    vec3 frameCol = vec3(0.5, 0.49, 0.46) * (0.45 + glow * 0.25);
-    col = mix(col, frameCol, frame);
-    float sillTop = 1.0 - smoothstep(0.0, 2.5, lp.y - uWin.y - fw * 0.6);
-    col = mix(col, stone * (0.6 + sillTop * 0.5) + warm * glow * 0.06, sill);
-
-    // ---- what's behind each window ----
-    if (inWin > 0.5) {
-      float h = hash(cell + 7.0);
-      vec3 room = vec3(0.45, 0.27, 0.12) * (1.05 - 0.75 * length((wuv - vec2(0.5, 0.35)) * vec2(1.0, 1.2)));
+    if (ok > 0.5 && inCol < 0.5) {
       if (proj > 0.5) {
-        // project rooms: warm light behind the fogged glass
-        col = room;
-      } else {
-        vec3 inside;
-        if (h > 0.56) {
-          // lit apartment with curtains
-          float curtain = smoothstep(0.24, 0.2, wuv.x) + smoothstep(0.76, 0.8, wuv.x);
-          float folds = 0.75 + 0.25 * sin(wuv.x * 90.0);
-          inside = mix(room * 0.85, vec3(0.32, 0.1, 0.07) * folds, clamp(curtain, 0.0, 1.0));
-        } else if (h > 0.5) {
-          // someone watching TV
-          float flick = 0.6 + 0.4 * sin(uTime * 7.0 + h * 50.0) * sin(uTime * 3.1 + h * 20.0);
-          inside = vec3(0.09, 0.15, 0.32) * flick * (1.1 - length(wuv - 0.5));
+        if (lp.y >= 0.0 && lp.y <= uWin.y) {
+          // project unit: warm room behind the fogged glass
+          vec2 u = lp / uWin;
+          vec3 lc = vec3(1.0, 0.72, 0.38);
+          col = lc * (0.38 + 0.25 * (1.0 - u.y));
         } else {
-          // dark room reflecting the sky
-          inside = vec3(0.025, 0.03, 0.045) + vec3(0.05, 0.06, 0.08) * (1.0 - wuv.y) * 0.6;
-          inside += vec3(0.06) * smoothstep(0.05, 0.0, abs(wuv.x - wuv.y * 0.5 - 0.35));
+          // floor slab under the project unit, then dark louvers behind the caption (keeps text readable)
+          float slab = step(lp.y, uWin.y + 9.0);
+          float lip = 1.0 - step(2.0, lp.y - uWin.y);
+          float slat = step(0.55, fract(lp.y / 7.0));
+          vec3 louver = vec3(0.07, 0.08, 0.1) * (0.8 + 0.45 * slat);
+          col = mix(louver, SLAB * (1.0 + lip * 0.6), slab);
         }
-        // mullions on the ordinary windows
-        float bar = step(abs(wuv.x - 0.5) * uWin.x, 2.5) + step(abs(wuv.y - 0.4) * uWin.y, 2.5);
-        inside = mix(inside, frameCol, clamp(bar, 0.0, 1.0));
-        col = inside;
+      } else {
+        // ordinary floors: 2 units across, several storeys per lattice cell
+        float ny = max(2.0, floor(uPitch.y / (uWin.x * 0.42) + 0.5));
+        vec2 us = vec2(uWin.x / 2.0, uPitch.y / ny);
+        vec2 q = vec2(lp.x, lp.y + uMargin);
+        vec2 uid = floor(q / us);
+        vec2 uq = q - uid * us;
+        float slabH = 8.0;
+        float gap = 3.0;
+        vec2 gid = cell * vec2(2.0, ny) + uid;
+        if (uq.y > us.y - slabH) {
+          float lip = 1.0 - step(2.0, uq.y - (us.y - slabH));
+          col = SLAB * (1.0 + lip * 0.6);
+        } else if (uq.x < gap || uq.x > us.x - gap) {
+          col = column * 0.9;
+        } else {
+          col = unit(uq - vec2(gap, 0.0), vec2(us.x - gap * 2.0, us.y - slabH), gid);
+        }
       }
     }
 
-    // ---- cornice along the roofline ----
+    // roof parapet
     float ty = p.y - uRect.y;
-    float cornice = 1.0 - step(18.0, ty);
-    col = mix(col, stone * (0.55 + (1.0 - smoothstep(0.0, 3.0, ty)) * 0.5), cornice);
-    col *= 1.0 - 0.5 * step(18.0, ty) * (1.0 - smoothstep(18.0, 46.0, ty));
+    col = mix(col, SLAB * (1.0 + (1.0 - step(2.0, ty)) * 0.8), 1.0 - step(14.0, ty));
 
-    // lightning lights up the wall
-    col += vec3(0.35, 0.38, 0.5) * uFlash * 0.45 * (1.0 - inWin * 0.6);
+    // lightning lights up the concrete
+    col += vec3(0.35, 0.38, 0.5) * uFlash * 0.4;
 
     float alpha = 1.0 - smoothstep(uRect.y + uRect.w - ${FADE.toFixed(1)}, uRect.y + uRect.w, p.y);
     gl_FragColor = vec4(col, alpha);
@@ -197,7 +224,7 @@ export default function Facade({ count }: { count: number }) {
     const rDown = count > cols ? els[cols]?.getBoundingClientRect() : null;
     const pitchX = r1 ? r1.left - r0.left : r0.width + 32;
     const pitchY = rDown ? rDown.top - r0.top : r0.height + 140;
-    const margin = THREE.MathUtils.clamp((pitchX - r0.width) / 2 - 1, 4, 14);
+    const margin = Math.max(3, (pitchX - r0.width) / 2); // the structural columns between panes
 
     const top = r0.top - ROOF_ABOVE;
     const bottom = r0.top + (rows - 1) * pitchY + r0.height + BELOW + FADE;

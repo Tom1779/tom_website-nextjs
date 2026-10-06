@@ -99,7 +99,7 @@ const glassFragment = /* glsl */ `
 
     // fog body with soft variation; heavier condensation near the bottom
     float body = fbm(q * 5.0 + uSeed * 10.0);
-    float fogA = mix(0.6, 0.86, body) * mix(1.0, 1.08, smoothstep(0.4, 0.0, uv.y));
+    float fogA = mix(0.5, 0.78, body) * mix(1.0, 1.08, smoothstep(0.4, 0.0, uv.y));
 
     // drying clears in blotchy patches rather than a uniform fade
     float evapN = fbm(q * 3.0 - uSeed * 4.0 + 0.3);
@@ -118,7 +118,7 @@ const glassFragment = /* glsl */ `
     // lightning makes the glass see-through for an instant
     fogA *= 1.0 - uFlash * 0.8;
 
-    vec3 fogCol = vec3(0.22, 0.27, 0.36) + vec3(0.2, 0.22, 0.27) * body * 0.5;
+    vec3 fogCol = vec3(0.66, 0.56, 0.45) + vec3(0.2, 0.17, 0.13) * body * 0.5; // lit from the room behind
     fogCol += vec3(0.95, 0.75, 0.5) * uShelter * 0.12; // a touch of warmth while sheltered
 
     // drop shading: dark rim, small specular highlight up-left
@@ -144,6 +144,18 @@ const glassFragment = /* glsl */ `
     float alpha = clamp(aFog + aRim + aSpec + aFrame, 0.0, 1.0);
     vec3 col = fogCol * aFog + vec3(0.55, 0.65, 0.8) * aRim + vec3(1.0) * aSpec + frameCol * aFrame;
     col /= max(aFog + aRim + aSpec + aFrame, 0.001);
+
+    // balcony in front of the window: tinted glass balustrade with a top rail and a mid bar
+    float railY = 0.27;
+    float yPx = uv.y / uPx.y;
+    float railPx = railY / uPx.y;
+    float balustrade = step(uv.y, railY);
+    float bars = (1.0 - smoothstep(1.2, 2.2, abs(yPx - railPx))) + (1.0 - smoothstep(0.4, 1.2, abs(yPx - railPx * 0.5)));
+    vec3 rail = vec3(0.06, 0.065, 0.08);
+    col = mix(col, rail, balustrade * 0.18 * (1.0 - alpha * 0.5));
+    alpha = max(alpha, balustrade * 0.18);
+    col = mix(col, rail, clamp(bars, 0.0, 1.0));
+    alpha = max(alpha, clamp(bars, 0.0, 1.0));
 
     gl_FragColor = vec4(col, alpha);
   }

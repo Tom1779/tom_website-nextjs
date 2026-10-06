@@ -71,19 +71,6 @@ function buildCanopy() {
   return { geo, height };
 }
 
-/** Thin struts from the runner on the shaft out to each rib, like a real umbrella frame. */
-function buildStruts(runnerY: number) {
-  const pts: number[] = [];
-  const v = new THREE.Vector3();
-  for (let i = 0; i < RIBS; i++) {
-    domePoint(0.62, (i / RIBS) * Math.PI * 2, v);
-    pts.push(0, runnerY, 0, v.x, v.y, v.z);
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
-  return geo;
-}
-
 const canopyVertex = /* glsl */ `
   varying vec3 vN;
   varying vec3 vV;
@@ -161,8 +148,6 @@ const canopyFragment = /* glsl */ `
   }
 `;
 
-const RUNNER_Y = 0.55; // runner position up the shaft (canopy radii above the grip)
-
 export default function Umbrella({ splashCount }: { splashCount: number }) {
   const size = useThree((s) => s.size);
   const outer = useRef<THREE.Group>(null);
@@ -173,13 +158,11 @@ export default function Umbrella({ splashCount }: { splashCount: number }) {
   const frontMat = useRef<THREE.ShaderMaterial>(null);
 
   const canopy = useMemo(buildCanopy, []);
-  const struts = useMemo(() => buildStruts(RUNNER_Y - SHAFT), []);
   useEffect(
     () => () => {
       canopy.geo.dispose();
-      struts.dispose();
     },
-    [canopy, struts],
+    [canopy],
   );
   const backUniforms = useMemo(
     () => ({ uTime: { value: 0 }, uFlash: { value: 0 }, uRain: { value: 0.5 }, uBack: { value: 0.6 } }),
@@ -345,20 +328,13 @@ export default function Umbrella({ splashCount }: { splashCount: number }) {
             <cylinderGeometry args={[0.03, 0.028, 0.03, 10]} />
             <meshStandardMaterial color="#8f6d3d" roughness={0.6} />
           </mesh>
-          {/* runner and tip */}
-          <mesh position={[0, RUNNER_Y, 0]}>
-            <cylinderGeometry args={[0.036, 0.036, 0.09, 10]} />
-            <meshStandardMaterial color="#eef0f2" roughness={0.4} />
-          </mesh>
+          {/* tip */}
           <mesh position={[0, top + 0.06, 0]}>
             <cylinderGeometry args={[0.012, 0.02, 0.12, 8]} />
             <meshStandardMaterial color="#f2f2f4" roughness={0.3} />
           </mesh>
 
           <group ref={canopyRef} position={[0, SHAFT, 0]}>
-            <lineSegments geometry={struts} renderOrder={9}>
-              <lineBasicMaterial color="#ffffff" transparent opacity={0.55} depthWrite={false} />
-            </lineSegments>
             {/* inside surface first, then the outside, so the clear vinyl blends in order */}
             <mesh geometry={canopy.geo} renderOrder={10}>
               <shaderMaterial
