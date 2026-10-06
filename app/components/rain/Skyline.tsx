@@ -538,6 +538,8 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
     gm.visible = visible;
     // the distant skyline rises from just behind the mid-ground row
     s.roofY = rect.top + L.skyTop + (L.height - L.skyTop) * 0.2;
+    // the pool picks up where the buildings start to dissolve
+    s.streetTop = rect.top + window.scrollY + L.height - STREET_FADE;
     if (!visible) return;
     const k = worldPerPixel(size.height, 0);
     const [cx, cy] = pxToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2, size.width, size.height, 0);

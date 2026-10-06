@@ -19,8 +19,7 @@ export const rainStore = {
   },
   // The city container and the layout both the DOM and the shader draw from
   cityEl: null as HTMLElement | null,
-  // the bat-signal section under the city, and the card projected in it
-  signalEl: null as HTMLElement | null,
+  // the profile card projected into the sky by the searchlight
   signalCardEl: null as HTMLElement | null,
   layout: null as CityLayout | null,
   dryness: new Float32Array(MAX_PROJECTS),

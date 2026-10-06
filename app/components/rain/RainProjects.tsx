@@ -72,7 +72,6 @@ export default function RainProjects({ items, renderList, about, aboutTitle }: R
   const [card, setCard] = useState(-1);
   const cardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cityRef = useRef<HTMLDivElement>(null);
-  const signalRef = useRef<HTMLDivElement>(null);
   const signalCardRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
   const lastPointerType = useRef<string>("mouse");
@@ -135,10 +134,8 @@ export default function RainProjects({ items, renderList, about, aboutTitle }: R
   // The bat-signal section: the scene aims its searchlight at the card and starts the pool below it
   useEffect(() => {
     if (mode !== "rain") return;
-    rainStore.signalEl = signalRef.current;
     rainStore.signalCardEl = signalCardRef.current;
     return () => {
-      rainStore.signalEl = null;
       rainStore.signalCardEl = null;
     };
   }, [mode]);
@@ -270,6 +267,7 @@ export default function RainProjects({ items, renderList, about, aboutTitle }: R
 
   const anyRevealed = revealed.some(Boolean);
   const showRain = mode === "rain";
+  const inSky = showRain && !!about;
 
   const renderCard = () => {
     if (!layout || card < 0 || !revealed[card]) return null;
@@ -325,71 +323,92 @@ export default function RainProjects({ items, renderList, about, aboutTitle }: R
 
         <header
           ref={headerRef}
-          className="relative z-20 w-full max-w-6xl px-4 pt-10 pb-4 text-center flex flex-col items-center gap-3"
+          className={
+            inSky
+              ? "relative z-20 w-full max-w-6xl px-4 sm:px-8 pt-8 pb-6 flex flex-col md:flex-row items-center justify-between gap-6"
+              : "relative z-20 w-full max-w-6xl px-4 pt-10 pb-4 text-center flex flex-col items-center gap-3"
+          }
         >
-          <p className="text-xs sm:text-sm tracking-[0.35em] uppercase text-sky-200/70">Software Engineer</p>
-          <h1 className="text-4xl sm:text-6xl font-bold text-white drop-shadow-[0_2px_18px_rgba(120,160,255,0.35)]">
-            Tom Arad
-          </h1>
-          <h2 id="projects-heading" className="sr-only">
-            Projects
-          </h2>
-          {showRain && (
-            <p className="max-w-xl text-sm sm:text-base text-slate-300/90 font-sans">
-              <span className="pointer-coarse:hidden">
-                Some windows in the city are frosted over. Hold your umbrella over one to dry it and see what&apos;s
-                inside.
-              </span>
-              <span className="hidden pointer-coarse:inline">
-                Some windows are frosted over. Tap one to plant your umbrella over it.
-              </span>
-            </p>
-          )}
-
-          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 font-sans text-sm">
+          <div
+            className={
+              inSky
+                ? "flex flex-col items-center md:items-start text-center md:text-left gap-3 md:max-w-lg"
+                : "contents"
+            }
+          >
+            <p className="text-xs sm:text-sm tracking-[0.35em] uppercase text-sky-200/70">Software Engineer</p>
+            <h1 className="text-4xl sm:text-6xl font-bold text-white drop-shadow-[0_2px_18px_rgba(120,160,255,0.35)]">
+              Tom Arad
+            </h1>
+            <h2 id="projects-heading" className="sr-only">
+              Projects
+            </h2>
             {showRain && (
-              <>
-                <button
-                  type="button"
-                  onClick={flash}
-                  className="inline-flex items-center gap-2 rounded-full border border-sky-200/30 bg-slate-900/60 px-4 py-2 text-sky-100 backdrop-blur hover:bg-sky-200/15 hover:border-sky-200/60 transition"
-                >
-                  <CloudLightning className="w-4 h-4" aria-hidden="true" />
-                  Flash: show me everything
-                </button>
-                {/* Always laid out (dimmed until needed) so revealing a window never shifts the city */}
-                <button
-                  type="button"
-                  onClick={refog}
-                  disabled={!anyRevealed}
-                  className={`inline-flex items-center gap-2 rounded-full border border-white/15 bg-slate-900/60 px-4 py-2 text-slate-200 backdrop-blur hover:bg-white/10 transition ${
-                    anyRevealed ? "opacity-100" : "opacity-40 cursor-not-allowed"
-                  }`}
-                >
-                  <RotateCcw className="w-4 h-4" aria-hidden="true" />
-                  Fog up again
-                </button>
-              </>
+              <p className="max-w-xl text-sm sm:text-base text-slate-300/90 font-sans">
+                <span className="pointer-coarse:hidden">
+                  Some windows in the city are frosted over. Hold your umbrella over one to dry it and see what&apos;s
+                  inside.
+                </span>
+                <span className="hidden pointer-coarse:inline">
+                  Some windows are frosted over. Tap one to plant your umbrella over it.
+                </span>
+              </p>
             )}
-            <button
-              type="button"
-              onClick={() => switchMode(showRain ? "list" : "rain")}
-              aria-pressed={!showRain}
-              className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-slate-900/60 px-4 py-2 text-slate-200 backdrop-blur hover:bg-white/10 transition"
+
+            <div
+              className={`flex flex-wrap items-center justify-center gap-2 sm:gap-3 font-sans text-sm ${inSky ? "md:justify-start" : ""}`}
             >
-              {showRain ? (
+              {showRain && (
                 <>
-                  <LayoutGrid className="w-4 h-4" aria-hidden="true" />
-                  Skip to list view
-                </>
-              ) : (
-                <>
-                  <CloudRain className="w-4 h-4" aria-hidden="true" />
-                  Back to the rain
+                  <button
+                    type="button"
+                    onClick={flash}
+                    className="inline-flex items-center gap-2 rounded-full border border-sky-200/30 bg-slate-900/60 px-4 py-2 text-sky-100 backdrop-blur hover:bg-sky-200/15 hover:border-sky-200/60 transition"
+                  >
+                    <CloudLightning className="w-4 h-4" aria-hidden="true" />
+                    Flash: show me everything
+                  </button>
+                  {/* Always laid out (dimmed until needed) so revealing a window never shifts the city */}
+                  <button
+                    type="button"
+                    onClick={refog}
+                    disabled={!anyRevealed}
+                    className={`inline-flex items-center gap-2 rounded-full border border-white/15 bg-slate-900/60 px-4 py-2 text-slate-200 backdrop-blur hover:bg-white/10 transition ${
+                      anyRevealed ? "opacity-100" : "opacity-40 cursor-not-allowed"
+                    }`}
+                  >
+                    <RotateCcw className="w-4 h-4" aria-hidden="true" />
+                    Fog up again
+                  </button>
                 </>
               )}
-            </button>
+              <button
+                type="button"
+                onClick={() => switchMode(showRain ? "list" : "rain")}
+                aria-pressed={!showRain}
+                className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-slate-900/60 px-4 py-2 text-slate-200 backdrop-blur hover:bg-white/10 transition"
+              >
+                {showRain ? (
+                  <>
+                    <LayoutGrid className="w-4 h-4" aria-hidden="true" />
+                    Skip to list view
+                  </>
+                ) : (
+                  <>
+                    <CloudRain className="w-4 h-4" aria-hidden="true" />
+                    Back to the rain
+                  </>
+                )}
+              </button>
+            </div>
           </div>
+
+          {/* the profile card, projected into the sky by a searchlight on a rooftop below it */}
+          {inSky && (
+            <div ref={signalCardRef} className="signal-card relative shrink-0">
+              {about}
+            </div>
+          )}
         </header>
 
         {showRain ? (
@@ -472,16 +491,8 @@ export default function RainProjects({ items, renderList, about, aboutTitle }: R
 
       {about &&
         (showRain ? (
-          // the card, projected onto the rain clouds by a searchlight on the roof below it
-          <div
-            ref={signalRef}
-            className="relative w-full flex justify-center pt-24 sm:pt-32"
-            style={{ paddingBottom: 320, marginBottom: POOL_H }}
-          >
-            <div ref={signalCardRef} className="signal-card relative">
-              {about}
-            </div>
-          </div>
+          // the pool and waterfalls start under the city; what follows begins below the pool, in the grotto
+          <div aria-hidden="true" style={{ height: POOL_H }} />
         ) : (
           <div className="w-full flex flex-col items-center gap-14 pt-14">
             {aboutTitle}
