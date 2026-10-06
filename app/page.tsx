@@ -6,6 +6,7 @@ import ProfileCard from "./components/ProfileCard";
 import ChromaGrid from "./components/ChromaGrid";
 import BlurText from "./components/BlurText";
 import RainProjects from "./components/rain/RainProjects";
+import AboutDetails from "./components/AboutDetails";
 import { items } from "./data/items";
 
 // Lazy load heavy components
@@ -90,6 +91,7 @@ export default function Home() {
               />
             </div>
           )}
+          renderAboutDetails={(onResume) => <AboutDetails onResume={onResume} />}
           aboutTitle={<BlurText text="About Me" delay={150} animateBy="words" direction="top" className="text-4xl" />}
           about={
             <ProfileCard
@@ -117,16 +119,14 @@ export default function Home() {
             </div>
           }
         >
-          <div className="w-full max-w-[800px] mx-auto px-4">
+          <div id="resume" className="w-full max-w-[800px] mx-auto px-4 scroll-mt-24">
             <PDFViewer fileUrl="TomArad-Resume.pdf" showToolbar={false} />
           </div>
         </Suspense>
 
         {/* Open in New Tab Button */}
         <button
-          onClick={() =>
-            window.open("/viewer?file=TomArad-Resume.pdf", "_blank")
-          }
+          onClick={() => window.open("/viewer?file=TomArad-Resume.pdf", "_blank")}
           className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors duration-200"
           aria-label="Open PDF in fullscreen"
         >

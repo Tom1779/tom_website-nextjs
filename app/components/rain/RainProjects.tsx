@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Image from "next/image";
+import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUpRight, CloudLightning, CloudRain, LayoutGrid, RotateCcw } from "lucide-react";
 import { rainStore } from "./store";
@@ -61,9 +62,11 @@ interface RainProjectsProps {
   /** The profile card: projected by the bat-signal in the rain view, shown under a title in list view. */
   about?: ReactNode;
   aboutTitle?: ReactNode;
+  /** Bio / skills / links shown beside the card in the pop-up; onResume closes it and jumps to the résumé. */
+  renderAboutDetails?: (onResume: () => void) => ReactNode;
 }
 
-export default function RainProjects({ items, renderList, about, aboutTitle }: RainProjectsProps) {
+export default function RainProjects({ items, renderList, about, aboutTitle, renderAboutDetails }: RainProjectsProps) {
   const [mode, setMode] = useState<ViewMode>("rain");
   const [ready, setReady] = useState(false);
   const [revealed, setRevealed] = useState<boolean[]>(() => items.map(() => false));
@@ -432,7 +435,7 @@ export default function RainProjects({ items, renderList, about, aboutTitle }: R
                 onFocus={() => (rainStore.signalHover = true)}
                 onBlur={() => (rainStore.signalHover = false)}
                 aria-haspopup="dialog"
-                aria-label="Open Tom's profile card"
+                aria-label="About Tom"
                 className="h-44 w-44 sm:h-60 sm:w-60 md:h-64 md:w-64 cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-amber-200/80"
               />
               <span className="font-sans text-[11px] tracking-[0.25em] uppercase text-amber-100/60">
@@ -530,28 +533,43 @@ export default function RainProjects({ items, renderList, about, aboutTitle }: R
             {about}
           </div>
         ))}
-      {profileOpen && about && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Tom's profile"
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm animate-in fade-in duration-200"
-          onClick={(e) => e.target === e.currentTarget && setProfileOpen(false)}
-        >
-          <div className="relative animate-in zoom-in-90 fade-in duration-300">
-            <button
-              ref={closeProfileRef}
-              type="button"
-              onClick={() => setProfileOpen(false)}
-              aria-label="Close"
-              className="absolute -top-12 right-0 z-10 rounded-full border border-white/20 bg-slate-900/80 px-3 py-1.5 font-sans text-sm text-slate-200 hover:bg-white/10"
-            >
-              Close ✕
-            </button>
-            {about}
-          </div>
-        </div>
-      )}
+      {/* portalled to <body>: <main> is its own stacking context, which would leave the navbar on top */}
+      {profileOpen &&
+        about &&
+        createPortal(
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="About Tom"
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-3 sm:p-6 backdrop-blur-sm animate-in fade-in duration-200"
+            onClick={(e) => e.target === e.currentTarget && setProfileOpen(false)}
+          >
+            <div className="relative flex max-h-[90svh] w-full max-w-5xl flex-col items-center gap-8 overflow-y-auto rounded-3xl border border-amber-200/20 bg-slate-950/85 p-5 pt-14 shadow-[0_20px_80px_rgba(0,0,0,0.6),0_0_40px_rgba(255,200,120,0.12)] sm:p-8 sm:pt-14 lg:flex-row lg:items-start lg:p-10 animate-in zoom-in-95 fade-in duration-300">
+              <button
+                ref={closeProfileRef}
+                type="button"
+                onClick={() => setProfileOpen(false)}
+                aria-label="Close"
+                className="absolute right-4 top-4 z-10 rounded-full border border-white/20 bg-slate-900/80 px-3 py-1.5 font-sans text-sm text-slate-200 hover:bg-white/10"
+              >
+                Close ✕
+              </button>
+              <div className="shrink-0 max-sm:[zoom:0.82]">{about}</div>
+              {renderAboutDetails && (
+                <div className="min-w-0 flex-1">
+                  {renderAboutDetails(() => {
+                    setProfileOpen(false);
+                    // after the pop-up closes (and focus returns to the signal), glide down to the résumé;
+                    // the PDF viewer below is lazy and grows the page as it loads, so re-aim until it settles
+                    const aim = () => document.getElementById("resume")?.scrollIntoView({ behavior: "smooth" });
+                    [60, 700, 1400].forEach((ms) => setTimeout(aim, ms));
+                  })}
+                </div>
+              )}
+            </div>
+          </div>,
+          document.body,
+        )}
     </>
   );
 }

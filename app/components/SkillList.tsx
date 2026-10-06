@@ -1,7 +1,7 @@
 import { Code, Database, Globe } from "lucide-react";
 
 // ✅ static skills outside the component
-const skills = [
+export const skills = [
   { name: "Python", icon: Code, color: "bg-blue-500/20" },
   { name: "C", icon: Code, color: "bg-blue-500/20" },
   { name: "C++", icon: Code, color: "bg-blue-500/20" },
