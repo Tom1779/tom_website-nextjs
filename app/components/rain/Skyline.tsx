@@ -238,7 +238,7 @@ const fragmentShader = /* glsl */ `
       float seg = floor(above / segH);
       vec2 tv = vec2(PD.x - x0, above - (seg + 0.5) * segH);
       float tr = 1.2 * s * wet;
-      float tdrop = step(0.5, hash(vec2(seg, hk * 7.0 + fk))) * inTrail * (1.0 - smoothstep(tr - 0.5, tr + 0.4, length(tv)));
+      float tdrop = step(0.72, hash(vec2(seg, hk * 7.0 + fk))) * inTrail * (1.0 - smoothstep(tr - 0.5, tr + 0.4, length(tv)));
       if (tdrop > tm) { tm = tdrop; tn = tv / max(tr, 0.001); }
     }
     P *= 1.0 - trail * 0.85 * wet;
@@ -246,8 +246,8 @@ const fragmentShader = /* glsl */ `
     // beads of condensation, big and small; they evaporate as the window dries
     vec2 n1;
     vec2 n2;
-    float b2 = beads(PD + 7.0 * s, 6.5 * s, 0.32, vec2(0.9, 1.7) * s, fj * 29.0 + 5.0, wet, n2);
-    float b1 = beads(PD, 15.0 * s, 0.3, vec2(2.4, 4.6) * s, fj * 13.0, wet, n1);
+    float b2 = beads(PD + 7.0 * s, 6.5 * s, 0.14, vec2(0.9, 1.7) * s, fj * 29.0 + 5.0, wet, n2);
+    float b1 = beads(PD, 15.0 * s, 0.17, vec2(2.4, 4.6) * s, fj * 13.0, wet, n1);
     P = dropShade(P, b2, n2);
     P = dropShade(P, b1, n1);
     P = dropShade(P, tm, tn);
