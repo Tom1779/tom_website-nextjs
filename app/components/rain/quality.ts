@@ -2,31 +2,30 @@
 
 export interface RainQuality {
   drops: number; // rain streak instances
-  grid: number; // particle samples per side for each project image
   splashes: number;
 }
 
 export function getRainQuality(): RainQuality {
   if (typeof window === "undefined") {
-    return { drops: 2500, grid: 56, splashes: 200 };
+    return { drops: 2500, splashes: 200 };
   }
   const w = window.innerWidth;
   const dpr = window.devicePixelRatio || 1;
   const coarse = window.matchMedia("(pointer: coarse)").matches;
 
   if (w < 768 || coarse) {
-    return { drops: 1200, grid: 40, splashes: 120 };
+    return { drops: 1200, splashes: 120 };
   }
   if (w > 2560 || dpr > 2) {
-    return { drops: 2200, grid: 48, splashes: 160 };
+    return { drops: 2200, splashes: 160 };
   }
   if (w > 1920) {
-    return { drops: 3000, grid: 56, splashes: 220 };
+    return { drops: 3000, splashes: 220 };
   }
   if (w > 1200) {
-    return { drops: 3200, grid: 64, splashes: 240 };
+    return { drops: 3200, splashes: 240 };
   }
-  return { drops: 2400, grid: 56, splashes: 200 };
+  return { drops: 2400, splashes: 200 };
 }
 
 // Camera setup shared by the scene and the px <-> world helpers

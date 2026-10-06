@@ -1,0 +1,402 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
+import * as THREE from "three";
+import { rainStore, MAX_PROJECTS } from "./store";
+import { MAX_BUILDINGS } from "./layout";
+import { pxToWorld, worldPerPixel } from "./quality";
+import { umbrellaState, SHAFT } from "./Umbrella";
+
+const DRY_SECONDS = 1.0; // time under the umbrella to fully dry a window
+const REFOG_SECONDS = 6.0; // a partly-dried window fogs back up this slowly
+const STREET_FADE = 160; // px at the bottom where the city dissolves into haze
+const TILE = 256; // atlas tile size per project image
+const BG = [11, 18, 32]; // backdrop behind each project image
+
+const vertexShader = /* glsl */ `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+// Draws every foreground building and its windows in container px, the same space the DOM uses,
+// so the project windows line up with their link hit-areas exactly.
+const fragmentShader = /* glsl */ `
+  #define MAXB ${MAX_BUILDINGS}
+  #define MAXP ${MAX_PROJECTS}
+  uniform vec2 uSize;
+  uniform vec2 uWin;
+  uniform vec2 uGap;
+  uniform vec2 uPad;
+  uniform vec4 uBld[MAXB];   // x, top, width, depth
+  uniform int uBldN;
+  uniform vec4 uProj[MAXP];  // x, y, w, h
+  uniform vec4 uProjS[MAXP]; // dryness, glow, revealed, atlas tile
+  uniform int uProjN;
+  uniform sampler2D uAtlas;
+  uniform float uTiles;
+  uniform float uAtlasReady;
+  uniform float uTime;
+  uniform float uFlash;
+  varying vec2 vUv;
+
+  float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float vnoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
+  }
+  float fbm(vec2 p) {
+    float v = 0.0, a = 0.5;
+    for (int i = 0; i < 4; i++) { v += a * vnoise(p); p *= 2.03; a *= 0.5; }
+    return v;
+  }
+
+  const vec3 FRAME = vec3(0.05, 0.055, 0.07);
+  const vec3 HAZE = vec3(0.06, 0.075, 0.11);
+  const vec3 AMBER = vec3(1.0, 0.68, 0.32);
+
+  // An ordinary apartment window: lit, TV-lit or dark, with a balcony rail
+  vec3 apartment(vec2 wp, vec2 id) {
+    vec2 u = wp / uWin;
+    float h = hash(id);
+    vec3 col;
+    if (h > 0.64) {
+      vec3 lc = mix(AMBER, vec3(1.0, 0.86, 0.62), hash(id + 3.0)) * mix(0.55, 1.0, hash(id + 4.0));
+      col = lc * (0.6 + 0.4 * (1.0 - u.y));
+      if (hash(id + 8.0) > 0.7) col *= 0.7 + 0.3 * step(0.45, fract(u.y * 7.0)); // blinds
+      if (hash(id + 9.0) > 0.65) col = mix(col, vec3(0.3, 0.09, 0.06), smoothstep(0.2, 0.16, u.x)); // curtain
+    } else if (h > 0.6) {
+      float flick = 0.6 + 0.4 * sin(uTime * 7.0 + h * 50.0) * sin(uTime * 3.1 + h * 20.0);
+      col = vec3(0.12, 0.2, 0.42) * flick;
+    } else {
+      col = vec3(0.025, 0.032, 0.05) + vec3(0.03, 0.035, 0.05) * (1.0 - u.y);
+      col += vec3(0.05, 0.06, 0.08) * smoothstep(0.06, 0.0, abs(u.x - u.y * 0.5 - 0.2));
+    }
+    // balcony glass + rail
+    float glassB = step(0.66, u.y);
+    col = mix(col, col * 0.65 + vec3(0.015, 0.02, 0.03), glassB * 0.5);
+    col = mix(col, FRAME * 1.8, 1.0 - step(1.0, abs(wp.y - uWin.y * 0.66)));
+    // frame + mullion
+    float edge = min(min(wp.x, uWin.x - wp.x), min(wp.y, uWin.y - wp.y));
+    float mull = (1.0 - step(0.8, abs(wp.x - uWin.x * 0.6))) * (1.0 - glassB);
+    return mix(col, FRAME, max(1.0 - step(1.5, edge), mull));
+  }
+
+  void main() {
+    vec2 p = vec2(vUv.x * uSize.x, (1.0 - vUv.y) * uSize.y);
+
+    // nearest building covering this pixel (array is sorted far -> near)
+    vec4 B = vec4(-1.0);
+    for (int i = 0; i < MAXB; i++) {
+      if (i >= uBldN) break;
+      vec4 b = uBld[i];
+      if (p.x >= b.x && p.x < b.x + b.z && p.y >= b.y) B = b;
+    }
+
+    vec4 outCol = vec4(0.0);
+    if (B.z > 0.0) {
+      vec2 lp = p - B.xy;
+      float seed = hash(vec2(B.x, B.z));
+      vec3 col = mix(vec3(0.095, 0.11, 0.145), vec3(0.14, 0.15, 0.19), seed) * mix(0.85, 1.05, vnoise(p * 0.03));
+      col *= mix(0.75, 1.0, vnoise(vec2(p.x * 0.06, p.y * 0.005)));
+      col += vec3(0.02, 0.03, 0.045) * smoothstep(0.6, 0.9, vnoise(vec2(p.x * 0.08, p.y * 0.015 - uTime * 0.6)));
+      // lit left edge, shaded right edge, parapet
+      col *= 1.0 + 0.3 * (1.0 - step(2.0, lp.x)) - 0.3 * step(B.z - 3.0, lp.x);
+      col = mix(col, col * 1.6, 1.0 - step(5.0, lp.y));
+
+      vec2 stepPx = uWin + uGap;
+      vec2 wl = lp - uPad;
+      vec2 cell = floor(wl / stepPx);
+      vec2 wp = wl - cell * stepPx;
+      float cols = floor((B.z - 2.0 * uPad.x + uGap.x) / stepPx.x);
+      float inGrid = step(0.0, cell.x) * step(cell.x, cols - 1.0) * step(0.0, cell.y);
+      if (inGrid > 0.5 && wp.x < uWin.x && wp.y < uWin.y) {
+        col = apartment(wp, cell + seed * 97.0);
+      } else if (step(0.0, cell.y) > 0.5 && lp.x > 2.0 && lp.x < B.z - 3.0) {
+        // floor slab line between storeys
+        float sy = wp.y - uWin.y - uGap.y * 0.35;
+        col = mix(col, col * 1.55, step(0.0, sy) * (1.0 - step(2.5, sy)));
+      }
+
+      // atmospheric perspective: farther buildings sink into the rain haze
+      col = mix(col, HAZE, B.w * 0.45);
+      col += vec3(0.3, 0.33, 0.45) * uFlash * (0.5 - B.w * 0.2);
+      outCol = vec4(col, 1.0);
+    }
+
+    // project windows: frosted glowing panes that clear as they dry
+    for (int j = 0; j < MAXP; j++) {
+      if (j >= uProjN) break;
+      vec4 r = uProj[j];
+      vec4 S = uProjS[j];
+      vec2 d = p - r.xy;
+      float inside = step(0.0, d.x) * step(d.x, r.z) * step(0.0, d.y) * step(d.y, r.w);
+      if (inside > 0.5) {
+        vec2 u = d / r.zw;
+        float dry = S.x;
+        vec3 room = vec3(1.0, 0.8, 0.52) * (0.75 + 0.25 * (1.0 - u.y));
+        // the project's image hangs inside the room, fitted to the window width
+        vec3 bg = vec3(${BG.map((c) => (c / 255).toFixed(4)).join(", ")});
+        vec3 poster = bg;
+        vec2 tuv = vec2(u.x, (d.y - (r.w - r.z) * 0.5) / r.z);
+        if (uAtlasReady > 0.5 && tuv.y >= 0.0 && tuv.y <= 1.0) {
+          poster = texture2D(uAtlas, vec2((S.w + clamp(tuv.x, 0.002, 0.998)) / uTiles, 1.0 - tuv.y)).rgb;
+        }
+        float show = max(smoothstep(0.55, 1.0, dry), uFlash * 0.85);
+        vec3 inner = mix(room, poster, show);
+
+        // frost clears in patches, with beads of rain on it
+        float f = fbm(u * vec2(2.2, 2.9) + float(j) * 3.7);
+        float evap = clamp((fbm(u * 1.7 - float(j)) - (dry * 1.35 - 0.2)) / 0.18, 0.0, 1.0);
+        vec2 bq = d / 5.0;
+        float bn = hash(floor(bq) + float(j));
+        float bead = step(0.7, bn) * (1.0 - smoothstep(0.18, 0.32, length(fract(bq) - 0.5)));
+        float fogA = mix(0.72, 0.94, f) * evap * (1.0 - bead * 0.6) * (1.0 - uFlash * 0.75);
+        // cool blue-white frost, unlike the amber rooms around it, so it reads as "something to dry"
+        vec3 frost = vec3(0.82, 0.9, 1.0) * (0.85 + 0.12 * sin(uTime * 1.6 + float(j) * 1.3));
+        vec3 col = mix(inner, frost, fogA);
+        col += vec3(1.0) * bead * 0.12 * (1.0 - dry);
+
+        // balcony rail and frame (frame glows amber when sheltered or hovered)
+        col = mix(col, FRAME * 1.8, 1.0 - step(1.0, abs(d.y - r.w * 0.66)));
+        float edge = min(min(d.x, r.z - d.x), min(d.y, r.w - d.y));
+        col = mix(col, mix(FRAME, AMBER, S.y), 1.0 - step(1.5 + S.y, edge));
+        outCol = vec4(col, 1.0);
+      } else {
+        // amber halo around a sheltered / hovered window
+        vec2 o = max(max(-d, d - r.zw), 0.0);
+        float dist = length(o);
+        float halo = S.y * exp(-dist / 7.0) * step(dist, 30.0);
+        // frosted windows give off a soft, slowly pulsing glow until they're dried
+        float frostHalo = (1.0 - S.z) * (1.0 - S.x) * (0.3 + 0.12 * sin(uTime * 1.6 + float(j) * 1.3)) * exp(-dist / 9.0) * step(dist, 40.0);
+        outCol.rgb += AMBER * halo * 0.5 + vec3(0.6, 0.75, 1.0) * frostHalo;
+        outCol.a = max(outCol.a, max(halo * 0.6, frostHalo));
+        // drying progress under the window
+        float bar = step(r.y + r.w + 4.0, p.y) * step(p.y, r.y + r.w + 6.0) * step(r.x, p.x) * step(p.x, r.x + r.z * S.x);
+        float showBar = bar * step(0.001, S.x) * (1.0 - S.z);
+        outCol = mix(outCol, vec4(1.0, 0.85, 0.55, 1.0), showBar);
+      }
+    }
+
+    // street-level haze, then fade out entirely
+    float street = smoothstep(uSize.y - ${(STREET_FADE + 120).toFixed(1)}, uSize.y, p.y);
+    outCol.rgb = mix(outCol.rgb, HAZE * 1.2, street * 0.7 * outCol.a);
+    outCol.a *= 1.0 - smoothstep(uSize.y - ${STREET_FADE.toFixed(1)}, uSize.y, p.y);
+    gl_FragColor = outCol;
+  }
+`;
+
+function loadImage(src: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+/** One row of square tiles, each project image "contain"-fitted on a dark backdrop. */
+async function buildAtlas(images: string[]) {
+  const canvas = document.createElement("canvas");
+  canvas.width = TILE * images.length;
+  canvas.height = TILE;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = `rgb(${BG.join(",")})`;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await Promise.all(
+    images.map(async (src, i) => {
+      try {
+        const img = await loadImage(src);
+        const iw = img.naturalWidth || TILE;
+        const ih = img.naturalHeight || TILE;
+        const pad = TILE * 0.08;
+        const k = Math.min((TILE - pad * 2) / iw, (TILE - pad * 2) / ih);
+        const w = iw * k;
+        const h = ih * k;
+        ctx.drawImage(img, i * TILE + (TILE - w) / 2, (TILE - h) / 2, w, h);
+      } catch {
+        /* missing image: the window just shows its room */
+      }
+    }),
+  );
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+interface SkylineProps {
+  images: string[];
+  onReveal: (index: number) => void;
+}
+
+export default function Skyline({ images, onReveal }: SkylineProps) {
+  const mesh = useRef<THREE.Mesh>(null);
+  const matRef = useRef<THREE.ShaderMaterial>(null);
+  const size = useThree((s) => s.size);
+  const [atlas, setAtlas] = useState<THREE.CanvasTexture | null>(null);
+  const glow = useRef(new Float32Array(MAX_PROJECTS));
+  const shown = useRef(new Float32Array(MAX_PROJECTS));
+  const imagesKey = images.join("|");
+
+  useEffect(() => {
+    let cancelled = false;
+    let tex: THREE.CanvasTexture | null = null;
+    buildAtlas(imagesKey.split("|")).then((t) => {
+      if (cancelled) return t.dispose();
+      tex = t;
+      setAtlas(t);
+    });
+    return () => {
+      cancelled = true;
+      tex?.dispose();
+    };
+  }, [imagesKey]);
+
+  const uniforms = useMemo(
+    () => ({
+      uSize: { value: new THREE.Vector2(1, 1) },
+      uWin: { value: new THREE.Vector2(1, 1) },
+      uGap: { value: new THREE.Vector2(1, 1) },
+      uPad: { value: new THREE.Vector2(1, 1) },
+      uBld: { value: Array.from({ length: MAX_BUILDINGS }, () => new THREE.Vector4()) },
+      uBldN: { value: 0 },
+      uProj: { value: Array.from({ length: MAX_PROJECTS }, () => new THREE.Vector4()) },
+      uProjS: { value: Array.from({ length: MAX_PROJECTS }, () => new THREE.Vector4()) },
+      uProjN: { value: 0 },
+      uAtlas: { value: null as THREE.Texture | null },
+      uTiles: { value: 1 },
+      uAtlasReady: { value: 0 },
+      uTime: { value: 0 },
+      uFlash: { value: 0 },
+    }),
+    [],
+  );
+
+  useFrame((state, rawDt) => {
+    const dt = Math.min(rawDt, 1 / 20);
+    const s = rainStore;
+    const L = s.layout;
+    const el = s.cityEl;
+    const m = mesh.current;
+    const u = matRef.current?.uniforms;
+    if (!L || !el || !m || !u) {
+      if (m) m.visible = false;
+      return;
+    }
+    const n = Math.min(L.windows.length, MAX_PROJECTS);
+    const rect = el.getBoundingClientRect();
+
+    // ---- drying simulation ----
+    if (s.refogRequested) {
+      s.refogRequested = false;
+      s.dryness.fill(0);
+      s.revealed.fill(0);
+      s.boost.fill(0);
+    }
+    if (s.revealAllRequested) {
+      s.revealAllRequested = false;
+      for (let i = 0; i < n; i++) {
+        if (!s.revealed[i]) {
+          s.revealed[i] = 1;
+          onReveal(i);
+        }
+      }
+    }
+
+    // The window is sheltered when it sits under the canopy: between the rim and the hand
+    let sheltered = -1;
+    if (umbrellaState.open > 0.6) {
+      const R = umbrellaState.radiusPx;
+      const zoneTop = umbrellaState.gy - SHAFT * R - 8;
+      const zoneBottom = umbrellaState.gy + 14;
+      for (let i = 0; i < n; i++) {
+        const w = L.windows[i];
+        const cx = rect.left + w.x + w.w / 2;
+        const cy = rect.top + w.y + w.h / 2;
+        if (Math.abs(cx - umbrellaState.gx) < R * 0.85 && cy > zoneTop && cy < zoneBottom) {
+          sheltered = i;
+          break;
+        }
+      }
+    }
+    s.sheltered = sheltered;
+
+    for (let i = 0; i < n; i++) {
+      if (s.revealed[i]) {
+        s.dryness[i] = 1;
+      } else {
+        let d = s.dryness[i];
+        d += i === sheltered ? dt / DRY_SECONDS : -dt / REFOG_SECONDS;
+        if (s.boost[i] > 0) {
+          d += s.boost[i] * dt;
+          s.boost[i] = Math.max(0, s.boost[i] - dt * 2);
+        }
+        d = THREE.MathUtils.clamp(d, 0, 1);
+        s.dryness[i] = d;
+        if (d >= 1) {
+          s.revealed[i] = 1;
+          onReveal(i);
+        }
+      }
+    }
+
+    // ---- place the city plane exactly over the container ----
+    const visible = rect.bottom > 0 && rect.top < size.height;
+    m.visible = visible;
+    // the distant skyline sits a little below the foreground rooftops
+    const lowestRoof = L.buildings.reduce((m, b) => Math.max(m, b.top), 0);
+    s.roofY = rect.top + lowestRoof + 40;
+    if (!visible) return;
+    const k = worldPerPixel(size.height, 0);
+    const [cx, cy] = pxToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2, size.width, size.height, 0);
+    m.position.set(cx, cy, 0);
+    m.scale.set(rect.width * k, rect.height * k, 1);
+
+    // ---- uniforms (through the material: R3F copies uniform values) ----
+    u.uSize.value.set(L.width, L.height);
+    u.uWin.value.set(L.win.w, L.win.h);
+    u.uGap.value.set(L.gap.x, L.gap.y);
+    u.uPad.value.set(L.pad.x, L.pad.top);
+    const nb = Math.min(L.buildings.length, MAX_BUILDINGS);
+    for (let i = 0; i < nb; i++) {
+      const b = L.buildings[i];
+      u.uBld.value[i].set(b.x, b.top, b.w, b.depth);
+    }
+    u.uBldN.value = nb;
+    for (let i = 0; i < n; i++) {
+      const w = L.windows[i];
+      const hot = s.sheltered === i || s.pointer.overLink === i ? 1 : 0;
+      glow.current[i] += (hot - glow.current[i]) * Math.min(1, dt * 8);
+      // ease the visual dryness so jumps (flash / reveal all) still animate
+      shown.current[i] += (s.dryness[i] - shown.current[i]) * Math.min(1, dt * 5);
+      u.uProj.value[i].set(w.x, w.y, w.w, w.h);
+      u.uProjS.value[i].set(shown.current[i], glow.current[i], s.revealed[i], w.project);
+    }
+    u.uProjN.value = n;
+    u.uAtlas.value = atlas;
+    u.uTiles.value = images.length;
+    u.uAtlasReady.value = atlas ? 1 : 0;
+    u.uTime.value = state.clock.elapsedTime;
+    u.uFlash.value = s.flash;
+  });
+
+  return (
+    <mesh ref={mesh} renderOrder={0} frustumCulled={false}>
+      <planeGeometry args={[1, 1]} />
+      <shaderMaterial
+        ref={matRef}
+        vertexShader={vertexShader}
+        fragmentShader={fragmentShader}
+        uniforms={uniforms}
+        transparent
+        depthWrite={false}
+      />
+    </mesh>
+  );
+}

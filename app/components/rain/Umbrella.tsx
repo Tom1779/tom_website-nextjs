@@ -9,7 +9,7 @@ import { pxToWorld, worldPerPixel } from "./quality";
 const UMB_Z = 3;
 const RIBS = 8;
 // Shaft length from grip to canopy rim, in canopy radii
-const SHAFT = 0.95;
+export const SHAFT = 0.95;
 
 /** Live umbrella state, read by Rain (shelter) and Panels (drying). */
 export const umbrellaState = {

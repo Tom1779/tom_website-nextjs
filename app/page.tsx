@@ -75,7 +75,7 @@ export default function Home() {
 
   return (
     <>
-      <main className="relative z-0 text-white p-8 pt-0 flex flex-col items-center justify-center flex-1 gap-14">
+      <main className="relative z-0 text-white pb-8 flex flex-col items-center justify-center flex-1 gap-14">
         {/* Rain & umbrella hero: projects behind fogged glass (list view fallback inside) */}
         <RainProjects
           items={memoizedItems}
@@ -123,7 +123,7 @@ export default function Home() {
             </div>
           }
         >
-          <div className="w-full max-w-[800px] mx-auto">
+          <div className="w-full max-w-[800px] mx-auto px-4">
             <PDFViewer fileUrl="TomArad-Resume.pdf" showToolbar={false} />
           </div>
         </Suspense>

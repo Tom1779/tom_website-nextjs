@@ -1,7 +1,8 @@
 // Mutable state shared between the DOM layer (RainProjects) and the R3F scene.
 // Kept outside React so the render loop can read/write it every frame without re-renders.
+import type { CityLayout } from "./layout";
 
-export const MAX_PANELS = 32;
+export const MAX_PROJECTS = 16;
 
 export const rainStore = {
   pointer: {
@@ -9,20 +10,21 @@ export const rainStore = {
     y: 0,
     // Document-space y used when the umbrella is planted (touch), so it scrolls with the page
     docY: 0,
-    inside: false, // pointer is over the projects section
+    inside: false, // pointer is over the city
     planted: false, // touch devices: umbrella stays where it was tapped
     seen: false, // pointer has moved at least once
     // index of the revealed (clickable) project the mouse is over, or -1
     overLink: -1,
   },
-  sectionEl: null as HTMLElement | null,
-  panelEls: [] as (HTMLElement | null)[],
-  dryness: new Float32Array(MAX_PANELS),
-  // Panels that have fully dried stay revealed
-  revealed: new Uint8Array(MAX_PANELS),
-  // Click-to-dry boost per panel (decays)
-  boost: new Float32Array(MAX_PANELS),
-  // Which panel the umbrella is currently sheltering (-1 for none)
+  // The city container and the layout both the DOM and the shader draw from
+  cityEl: null as HTMLElement | null,
+  layout: null as CityLayout | null,
+  dryness: new Float32Array(MAX_PROJECTS),
+  // Windows that have fully dried stay revealed
+  revealed: new Uint8Array(MAX_PROJECTS),
+  // Click-to-dry boost per window (decays)
+  boost: new Float32Array(MAX_PROJECTS),
+  // Which project window the umbrella is currently sheltering (-1 for none)
   sheltered: -1,
   // 0..1 lightning flash brightness for this frame
   flash: 0,
@@ -31,7 +33,7 @@ export const rainStore = {
   refogRequested: false,
   // 0..1 rain heaviness, driven by scroll progress
   intensity: 0.5,
-  // client-px y of the apartment building's roofline (NaN when not laid out yet)
+  // client-px y where the distant skyline should sit (NaN when not laid out yet)
   roofY: NaN,
 };
 

@@ -1,9 +1,11 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { CloudLightning, CloudRain, LayoutGrid, RotateCcw } from "lucide-react";
+import { ArrowUpRight, CloudLightning, CloudRain, LayoutGrid, RotateCcw } from "lucide-react";
 import { rainStore } from "./store";
+import { cityHeight, computeCityLayout, type CityLayout } from "./layout";
 
 const RainScene = dynamic(() => import("./RainScene"), { ssr: false });
 
@@ -17,6 +19,20 @@ export interface RainProject {
 
 type ViewMode = "rain" | "list";
 const STORAGE_KEY = "tom-site-view";
+const CARD_W = 280;
+const HIT = 8; // px of forgiveness around each small project window
+
+const shortTitle = (t: string) => t.replace(/\s*\(.*?\)\s*/g, " ").trim();
+
+/** Centre a window's name tag under it, but pin it inside the city near the screen edges. */
+function tagStyle(w: { x: number; y: number; w: number; h: number }, width: number) {
+  const cx = w.x + w.w / 2;
+  const top = w.y + w.h + 10;
+  const edge = 90; // roughly half of the longest tag
+  if (cx < edge) return { left: Math.max(4, w.x - 6), top };
+  if (cx > width - edge) return { right: Math.max(4, width - (w.x + w.w + 6)), top };
+  return { left: cx, top, transform: "translateX(-50%)" };
+}
 
 /** Which revealed (clickable) project, if any, is under the mouse right now. */
 function refreshOverLink() {
@@ -48,7 +64,12 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
   const [mode, setMode] = useState<ViewMode>("rain");
   const [ready, setReady] = useState(false);
   const [revealed, setRevealed] = useState<boolean[]>(() => items.map(() => false));
-  const gridRef = useRef<HTMLUListElement>(null);
+  const [layout, setLayout] = useState<CityLayout | null>(null);
+  // project whose detail card is showing (hovered / focused / tapped)
+  const [card, setCard] = useState(-1);
+  const cardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cityRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
   const lastPointerType = useRef<string>("mouse");
 
   // Pick the initial view: saved choice > reduced motion / no WebGL > rain
@@ -75,18 +96,50 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
     }
   };
 
-  // Hide the city/beams background swap and track the pointer while the rain view is active
+  // Lay the city out from the container's size; the shader reads the same layout from the store
+  useEffect(() => {
+    if (mode !== "rain") return;
+    const el = cityRef.current;
+    if (!el) return;
+    let lastKey = "";
+    const update = () => {
+      const h = cityHeight(window.innerWidth, window.innerHeight);
+      // the header floats in the sky; buildings start just under it
+      const skyTop = (headerRef.current?.offsetHeight ?? 0) + 16;
+      const key = `${el.clientWidth}x${h}x${skyTop}`;
+      if (key === lastKey) return;
+      lastKey = key;
+      const next = computeCityLayout(el.clientWidth, h, items.length, skyTop);
+      rainStore.layout = next;
+      setLayout(next);
+    };
+    rainStore.cityEl = el;
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    if (headerRef.current) ro.observe(headerRef.current);
+    window.addEventListener("resize", update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+      rainStore.cityEl = null;
+      rainStore.layout = null;
+    };
+  }, [mode, items.length]);
+
+  // Hide the beams background and track the pointer while the rain view is active
   useEffect(() => {
     if (mode !== "rain") return;
     document.documentElement.dataset.rain = "on";
     const ptr = rainStore.pointer;
 
     const updateInside = () => {
-      const el = gridRef.current;
+      const el = cityRef.current;
       if (!el || ptr.planted) return;
       const r = el.getBoundingClientRect();
-      const pad = 40;
-      ptr.inside = ptr.x > r.left - pad && ptr.x < r.right + pad && ptr.y > r.top - pad && ptr.y < r.bottom + pad;
+      // the umbrella only comes out below the header, over the buildings
+      const skyBottom = headerRef.current?.getBoundingClientRect().bottom ?? r.top;
+      ptr.inside = ptr.x > r.left && ptr.x < r.right && ptr.y > skyBottom && ptr.y < r.bottom;
     };
 
     const updateIntensity = () => {
@@ -108,8 +161,10 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
     const onDown = (e: PointerEvent) => {
       lastPointerType.current = e.pointerType;
       if (e.pointerType !== "touch") return;
-      const el = gridRef.current;
+      const el = cityRef.current;
       if (!el || !el.contains(e.target as Node)) return;
+      // tapping the open card itself shouldn't move the umbrella
+      if ((e.target as Element).closest("[data-card]")) return;
       // Touch: plant the umbrella where the user tapped
       ptr.planted = true;
       ptr.seen = true;
@@ -145,9 +200,11 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
     };
   }, [mode]);
 
-  // A pane that just dried under the cursor becomes clickable straight away
+  // A window that just dried under the cursor becomes clickable (and shows its card) straight away
   useEffect(() => {
     refreshOverLink();
+    const over = rainStore.pointer.overLink;
+    if (over >= 0 && revealed[over]) setCard(over);
   }, [revealed]);
 
   const handleReveal = useCallback((i: number) => {
@@ -159,6 +216,15 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
     });
   }, []);
 
+  const showCard = (i: number) => {
+    if (cardTimer.current) clearTimeout(cardTimer.current);
+    setCard(i);
+  };
+  const hideCardSoon = () => {
+    if (cardTimer.current) clearTimeout(cardTimer.current);
+    cardTimer.current = setTimeout(() => setCard(-1), 180);
+  };
+
   const flash = () => {
     rainStore.flashRequested = true;
     rainStore.revealAllRequested = true;
@@ -167,16 +233,67 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
   const refog = () => {
     rainStore.refogRequested = true;
     setRevealed(items.map(() => false));
+    setCard(-1);
   };
 
   const anyRevealed = revealed.some(Boolean);
   const showRain = mode === "rain";
 
+  const renderCard = () => {
+    if (!layout || card < 0 || !revealed[card]) return null;
+    const w = layout.windows.find((x) => x.project === card);
+    const item = items[card];
+    if (!w || !item) return null;
+    const external = item.url?.startsWith("http");
+    const cardW = Math.min(CARD_W, layout.width - 16);
+    let left = w.x + w.w + 16;
+    if (left + cardW > layout.width - 8) left = w.x - 16 - cardW;
+    left = Math.max(8, Math.min(left, layout.width - cardW - 8));
+    const top = Math.max(8, Math.min(w.y + w.h / 2 - 150, layout.height - 330));
+    return (
+      <a
+        data-card
+        data-index={card}
+        data-revealed=""
+        href={item.url ?? "#"}
+        target={external ? "_blank" : undefined}
+        rel={external ? "noopener noreferrer" : undefined}
+        style={{ left, top, width: cardW }}
+        onPointerEnter={() => showCard(card)}
+        onPointerLeave={(e) => e.pointerType !== "touch" && hideCardSoon()}
+        className="group absolute z-10 overflow-hidden rounded-xl border border-amber-200/25 bg-slate-950/90 text-left shadow-[0_10px_40px_rgba(0,0,0,0.6),0_0_24px_rgba(255,180,90,0.15)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-200"
+      >
+        <div className="relative h-36 w-full bg-[#0b1220]">
+          <Image src={item.image} alt="" fill sizes="280px" className="object-contain p-3" />
+        </div>
+        <div className="p-4">
+          <h3 className="text-sm font-semibold leading-snug text-white transition-colors group-hover:text-amber-100">
+            {item.title}
+          </h3>
+          <p className="mt-1.5 font-sans text-xs leading-relaxed text-slate-300 line-clamp-4">{item.subtitle}</p>
+          <p className="mt-3 flex items-center justify-between font-sans text-xs">
+            <span className="text-sky-300/90">{item.handle}</span>
+            <span className="flex items-center gap-1 text-amber-200/90">
+              View project <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </span>
+          </p>
+        </div>
+      </a>
+    );
+  };
+
   return (
-    <section className="relative w-full flex flex-col items-center" aria-labelledby="projects-heading">
+    <section
+      className="relative w-full flex flex-col items-center"
+      style={{ minHeight: showRain ? (layout?.height ?? 640) : undefined }}
+      aria-labelledby="projects-heading"
+    >
       {showRain && ready && <RainScene images={items.map((p) => p.image)} onReveal={handleReveal} />}
 
-      <header className="w-full max-w-6xl px-4 pt-10 sm:pt-16 pb-28 sm:pb-32 text-center flex flex-col items-center gap-4">
+      <header
+        ref={headerRef}
+        className="relative z-20 w-full max-w-6xl px-4 pt-10 sm:pt-16 pb-6 text-center flex flex-col items-center gap-4"
+      >
         <p className="text-xs sm:text-sm tracking-[0.35em] uppercase text-sky-200/70">Software Engineer</p>
         <h1 className="text-4xl sm:text-6xl font-bold text-white drop-shadow-[0_2px_18px_rgba(120,160,255,0.35)]">
           Tom Arad
@@ -187,10 +304,11 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
         {showRain && (
           <p className="max-w-xl text-sm sm:text-base text-slate-300/90 font-sans">
             <span className="pointer-coarse:hidden">
-              It&apos;s pouring. Hold your umbrella over a fogged pane to dry it and see what&apos;s inside.
+              Some windows in the city are frosted over. Hold your umbrella over one to dry it and see what&apos;s
+              inside.
             </span>
             <span className="hidden pointer-coarse:inline">
-              It&apos;s pouring. Tap a fogged pane to plant your umbrella over it.
+              Some windows are frosted over. Tap one to plant your umbrella over it.
             </span>
           </p>
         )}
@@ -206,7 +324,7 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
                 <CloudLightning className="w-4 h-4" aria-hidden="true" />
                 Flash: show me everything
               </button>
-              {/* Always laid out (dimmed until needed) so revealing a pane never shifts the grid under the umbrella */}
+              {/* Always laid out (dimmed until needed) so revealing a window never shifts the city */}
               <button
                 type="button"
                 onClick={refog}
@@ -242,70 +360,74 @@ export default function RainProjects({ items, renderList }: RainProjectsProps) {
       </header>
 
       {showRain ? (
-        <ul
-          ref={gridRef}
-          className="umbrella-zone w-full max-w-6xl px-4 sm:px-6 pb-16 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-4 sm:gap-x-8 gap-y-8 sm:gap-y-12"
-        >
-          {items.map((item, i) => {
-            const isOpen = revealed[i];
-            const external = item.url?.startsWith("http");
-            return (
-              <li key={item.title} className="flex flex-col">
-                <a
-                  data-index={i}
-                  data-revealed={isOpen ? "" : undefined}
-                  href={item.url ?? "#"}
-                  target={external ? "_blank" : undefined}
-                  rel={external ? "noopener noreferrer" : undefined}
-                  onClick={(e) => {
-                    if (isOpen) return;
-                    // A fogged pane can't be opened yet: a mouse click speeds up drying,
-                    // a tap just plants the umbrella (handled by the pointerdown listener)
-                    e.preventDefault();
-                    if (lastPointerType.current !== "touch") rainStore.boost[i] = 3;
-                  }}
-                  onFocus={() => {
-                    // Keyboard users get the pane dried straight away
-                    if (!isOpen && lastPointerType.current !== "touch") rainStore.boost[i] = 6;
-                  }}
-                  className="group flex flex-col gap-3 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-sky-300/80 focus-visible:ring-offset-4 focus-visible:ring-offset-transparent"
-                >
-                  <div
-                    ref={(el) => {
-                      rainStore.panelEls[i] = el;
-                    }}
-                    data-pane
-                    className="relative aspect-square w-full rounded-md"
-                  >
-                    {/* drying progress */}
-                    <div
+        <div ref={cityRef} className="umbrella-zone absolute inset-x-0 top-0" style={{ height: layout?.height ?? 640 }}>
+          {layout && (
+            <ul>
+              {layout.windows.map((w) => {
+                const i = w.project;
+                const item = items[i];
+                if (!item) return null;
+                const isOpen = revealed[i];
+                const external = item.url?.startsWith("http");
+                return (
+                  <li key={item.title}>
+                    <a
+                      data-index={i}
+                      data-revealed={isOpen ? "" : undefined}
+                      href={item.url ?? "#"}
+                      target={external ? "_blank" : undefined}
+                      rel={external ? "noopener noreferrer" : undefined}
+                      style={{ left: w.x - HIT, top: w.y - HIT, width: w.w + HIT * 2, height: w.h + HIT * 2 }}
+                      className="absolute rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-200"
+                      onClick={(e) => {
+                        const touch = lastPointerType.current === "touch";
+                        if (!isOpen) {
+                          // A frosted window can't be opened yet: a click speeds up drying,
+                          // a tap just plants the umbrella (handled by the pointerdown listener)
+                          e.preventDefault();
+                          if (!touch) rainStore.boost[i] = 3;
+                        } else if (touch && card !== i) {
+                          // On touch, the first tap on a dry window shows its card
+                          e.preventDefault();
+                          showCard(i);
+                        }
+                      }}
+                      onPointerEnter={(e) => {
+                        if (e.pointerType !== "touch" && isOpen) showCard(i);
+                      }}
+                      onPointerLeave={(e) => {
+                        if (e.pointerType !== "touch") hideCardSoon();
+                      }}
+                      onFocus={() => {
+                        // Keyboard users get the window dried straight away
+                        if (!isOpen && lastPointerType.current !== "touch") rainStore.boost[i] = 6;
+                        if (isOpen) showCard(i);
+                      }}
+                      onBlur={hideCardSoon}
+                    >
+                      <span className="sr-only">
+                        {item.title}: {item.subtitle}
+                      </span>
+                    </a>
+                    {/* name tag hung under a window once it's dry */}
+                    <span
                       aria-hidden="true"
-                      className={`absolute left-2 right-2 bottom-2 h-0.5 rounded-full bg-amber-200/80 origin-left transition-opacity duration-300 ${
-                        isOpen ? "opacity-0" : "opacity-100"
+                      style={tagStyle(w, layout.width)}
+                      className={`pointer-events-none absolute whitespace-nowrap rounded-full border border-amber-200/40 bg-slate-950/85 px-2 py-0.5 font-sans text-[10px] sm:text-[11px] text-amber-100 shadow-[0_0_12px_rgba(255,190,110,0.25)] transition-opacity duration-500 ${
+                        isOpen ? "opacity-100" : "opacity-0"
                       }`}
-                      style={{ transform: "scaleX(var(--dry, 0))" }}
-                    />
-                  </div>
-                  <div
-                    className={`min-h-[7.5rem] sm:min-h-[6.5rem] transition-all duration-700 ${
-                      isOpen ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
-                    }`}
-                  >
-                    <h3 className="text-sm sm:text-base font-semibold text-white leading-snug transition-colors group-hover:text-amber-100">
-                      {item.title}
-                    </h3>
-                    <p className="mt-1 text-xs sm:text-sm text-slate-300 font-sans leading-relaxed line-clamp-3">
-                      {item.subtitle}
-                    </p>
-                    {item.handle && <p className="mt-2 text-xs font-sans text-sky-300/90">{item.handle}</p>}
-                  </div>
-                </a>
-              </li>
-            );
-          })}
-        </ul>
+                    >
+                      {shortTitle(item.title)}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {renderCard()}
+        </div>
       ) : (
-        <div className="w-full flex flex-col items-center pb-8">{renderList()}</div>
+        <div className="w-full flex flex-col items-center px-4 pb-8">{renderList()}</div>
       )}
     </section>
   );
