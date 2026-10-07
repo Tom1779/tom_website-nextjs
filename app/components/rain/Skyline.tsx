@@ -278,18 +278,49 @@ const fragmentShader = /* glsl */ `
     col = mix(col, vec3(0.16, 0.17, 0.2), 1.0 - smoothstep(4.0, 6.0, gy));
     float doorW = uWin.x * 0.95;
     float doorTop = H * 0.28;
-    // lobby door, warm light inside
-    float inDoor = step(ax, doorW * 0.5) * step(doorTop, gy);
-    vec3 lobby = vec3(1.0, 0.78, 0.48) * (0.55 + 0.35 * (gy - doorTop) / (H - doorTop));
-    lobby = mix(lobby, vec3(0.05, 0.05, 0.06), 1.0 - step(1.6, ax));                 // door split
-    lobby = mix(lobby, vec3(0.05, 0.05, 0.06), 1.0 - step(2.0, doorW * 0.5 - ax));   // frame
-    col = mix(col, lobby, inDoor);
-    // canopy over the door, lit from beneath
-    float canopy = step(ax, doorW * 0.85) * step(doorTop - 9.0, gy) * step(gy, doorTop - 3.0);
+    // the entrance: a lit transom, two dark doors with glass panes and push handles, a step, wall lamps
+    vec3 DARK = vec3(0.045, 0.04, 0.045);
+    float transomH = (H - doorTop) * 0.2;
+    float leafTop = doorTop + transomH;
+    float inFrame = step(ax, doorW * 0.5 + 3.0) * step(doorTop - 3.0, gy) * step(gy, H - 6.0);
+    col = mix(col, DARK, inFrame);                                                   // surround
+    if (ax < doorW * 0.5 && gy > doorTop && gy < leafTop - 2.0) {
+      col = vec3(1.0, 0.8, 0.5) * 0.85;                                             // lit transom
+      float bar = 1.0 - step(1.0, abs(abs(dx) - doorW / 6.0));                      // two glazing bars
+      col = mix(col, DARK, bar);
+    }
+    if (ax < doorW * 0.5 - 1.5 && gy > leafTop && gy < H - 6.0) {
+      float lx = mod(dx + doorW * 0.5, doorW * 0.5);                                // x inside one leaf
+      float lw = doorW * 0.5;
+      float ly = gy - leafTop;
+      float lh = H - 6.0 - leafTop;
+      vec3 leaf = vec3(0.16, 0.1, 0.07) * (0.85 + 0.15 * sin(lx * 0.9));          // wood
+      // a tall glass pane in each leaf, the lobby glowing behind it
+      float pane = step(4.0, lx) * step(lx, lw - 4.0) * step(4.0, ly) * step(ly, lh * 0.62);
+      leaf = mix(leaf, vec3(1.0, 0.78, 0.48) * (0.5 + 0.25 * (1.0 - ly / lh)), pane);
+      // kick plate and the gap between the leaves
+      leaf = mix(leaf, vec3(0.25, 0.22, 0.18), step(lh - 7.0, ly));
+      leaf = mix(leaf, DARK, 1.0 - step(1.0, min(lx, lw - lx)));
+      // brass push handles on the inner edges
+      float hy = step(lh * 0.48, ly) * step(ly, lh * 0.72);
+      float handle = hy * (1.0 - step(1.2, abs(ax - 4.5)));
+      leaf = mix(leaf, vec3(0.95, 0.75, 0.4), handle);
+      col = leaf;
+    }
+    // canopy over the entrance, lit from beneath
+    float canopy = step(ax, doorW * 0.85) * step(doorTop - 10.0, gy) * step(gy, doorTop - 4.0);
     col = mix(col, vec3(0.04, 0.042, 0.05), canopy);
-    col += vec3(1.0, 0.75, 0.45) * 0.25 * exp(-max(gy - doorTop, 0.0) / 30.0) * step(doorTop, gy) * step(ax, doorW * 1.4) * (1.0 - inDoor);
+    col += vec3(1.0, 0.75, 0.45) * 0.18 * exp(-max(gy - doorTop, 0.0) / 30.0) * step(doorTop, gy) * step(doorW * 0.5 + 3.0, ax) * step(ax, doorW * 1.3);
+    // wall lamps either side of the entrance
+    vec2 lampP = vec2(ax - (doorW * 0.5 + 10.0), gy - (leafTop + 6.0));
+    float lamp = 1.0 - smoothstep(2.5, 3.5, length(lampP * vec2(1.0, 0.7)));
+    col = mix(col, vec3(1.0, 0.85, 0.55) * 1.2, lamp);
+    col += vec3(1.0, 0.75, 0.45) * exp(-length(lampP) / 9.0) * 0.35 * (1.0 - inFrame);
+    // a step in front of the door
+    col = mix(col, vec3(0.22, 0.23, 0.26), step(ax, doorW * 0.5 + 6.0) * step(H - 6.0, gy) * step(gy, H - 2.0));
+
     // one fixed-size, lit shop window each side of the door
-    float sgap = uWin.x * 0.35;
+    float sgap = uWin.x * 0.35 + 8.0;
     float sw = min(uWin.x * 1.25, uMinW * 0.5 - doorW * 0.5 - sgap - uPad.x * 0.6);
     float sx = ax - doorW * 0.5 - sgap;
     if (sx > 0.0 && sx < sw && gy > doorTop && gy < H - 8.0) {

@@ -188,6 +188,8 @@ export default function RainProjects({
       // the umbrella only comes out below the header, over the buildings
       const skyBottom = headerRef.current?.getBoundingClientRect().bottom ?? r.top;
       ptr.inside = ptr.x > r.left && ptr.x < r.right && ptr.y > skyBottom && ptr.y < r.bottom;
+      // hide the system cursor only while the umbrella is actually out (not up in the sky)
+      el.dataset.umbrella = ptr.inside ? "on" : "";
     };
 
     const updateIntensity = () => {
@@ -222,7 +224,9 @@ export default function RainProjects({
     };
 
     const onLeave = () => {
-      if (!ptr.planted) ptr.inside = false;
+      if (ptr.planted) return;
+      ptr.inside = false;
+      if (cityRef.current) cityRef.current.dataset.umbrella = "";
     };
 
     const onScroll = () => {

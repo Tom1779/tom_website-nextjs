@@ -173,8 +173,8 @@ body {
 /* --- Rain & umbrella view --- */
 /* The umbrella replaces the cursor over the panes (mouse / pen only) */
 @media (pointer: fine) {
-  .umbrella-zone,
-  .umbrella-zone * {
+  .umbrella-zone[data-umbrella="on"],
+  .umbrella-zone[data-umbrella="on"] * {
     cursor: none;
   }
   /* ...until a pane has dried: then it's a link, so show the hand */
