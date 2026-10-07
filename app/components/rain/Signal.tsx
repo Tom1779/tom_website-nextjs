@@ -126,7 +126,7 @@ const fragmentShader = /* glsl */ `
     float haze = (1.0 - smoothstep(halfW, halfW * 1.9, perp)) * span;
     float dust = 0.75 + 0.5 * fbm(vec2(perp * 0.02, t * 6.0 - uTime * 0.3));
     float cx = floor(p.x / 3.0);
-    float drops = step(0.95, hash(vec2(cx, floor((p.y + uTime * 950.0 + hash(vec2(cx, 1.0)) * 300.0) / 24.0))));
+    float drops = step(0.95, hash(vec2(cx, floor((p.y - uTime * 950.0 + hash(vec2(cx, 1.0)) * 300.0) / 24.0))));
     light += inBeam * (0.22 * dust * (1.0 - 0.45 * t) + drops * 0.45) + haze * 0.05;
 
     light *= 0.94 + 0.06 * sin(uTime * 13.0) * sin(uTime * 7.3);

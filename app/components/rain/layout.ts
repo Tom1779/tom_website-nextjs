@@ -43,7 +43,8 @@ function mulberry32(seed: number) {
   };
 }
 
-export const STREET_FADE = 130; // bottom px where the buildings dissolve into the street
+export const STREET_FADE = 130; // bottom px of ordinary ground floors (projects stay above them)
+export const GROUND_H = 34; // wet sidewalk + curb the buildings stand on, at the bottom of the city
 export const POOL_H = 220; // px of pool under the city before the water spills over the sides
 
 /** Height of the city container: at least the first screen, tall enough for two storeys of big windows. */
@@ -71,7 +72,7 @@ export function computeCityLayout(width: number, height: number, count: number, 
   const nb = Math.min(MAX_BUILDINGS, small ? 2 : 3);
   const cap = Math.ceil(count / nb);
   const slot = width / nb;
-  const fade = STREET_FADE; // keep projects above the street haze
+  const fade = STREET_FADE; // keep projects above the ground floors
 
   const buildings: Building[] = [];
   for (let i = 0; i < nb; i++) {

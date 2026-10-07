@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { rainStore, MAX_PROJECTS } from "./store";
-import { MAX_BUILDINGS, STREET_FADE } from "./layout";
+import { GROUND_H, MAX_BUILDINGS } from "./layout";
 import { pxToWorld, worldPerPixel } from "./quality";
 import { umbrellaState, SHAFT } from "./Umbrella";
 
@@ -262,7 +262,8 @@ const fragmentShader = /* glsl */ `
 
   void main() {
     vec2 p = vec2(vUv.x * uSize.x, (1.0 - vUv.y) * uSize.y);
-    float fade = 1.0 - smoothstep(uSize.y - ${STREET_FADE.toFixed(1)}, uSize.y, p.y);
+    float fade = 1.0;
+    float gTop = uSize.y - ${GROUND_H.toFixed(1)}; // the sidewalk the buildings stand on
 
     // a light pass finds which project window (if any) this pixel is in and gathers the halos;
     // the expensive shading then runs once, outside the loop (keeps the shader compilable on D3D)
@@ -364,10 +365,39 @@ const fragmentShader = /* glsl */ `
 
     if (pj >= 0) outCol = vec4(windowInner(p - PR.xy, PR, PS), 1.0);
 
-    // street-level haze, then fade out entirely
-    float street = smoothstep(uSize.y - ${(STREET_FADE + 140).toFixed(1)}, uSize.y, p.y);
-    outCol.rgb = mix(outCol.rgb, HAZE * 1.15, street * 0.75 * outCol.a);
-    outCol.a *= fade;
+    // a little rain haze down at street level
+    outCol.rgb = mix(outCol.rgb, HAZE * 1.1, smoothstep(gTop - 160.0, gTop, p.y) * 0.25 * outCol.a);
+
+    // rain splashing where it hits the ground: tiny crowns jumping off the curb
+    if (p.y > gTop - 12.0 && p.y < gTop + 6.0) {
+      float sc = floor(p.x / 9.0);
+      float ph = fract(uTime * 2.6 + hash(vec2(sc, 3.0)) * 7.0);
+      float on = step(0.55, hash(vec2(sc, floor(uTime * 2.6 + hash(vec2(sc, 3.0)) * 7.0))));
+      float sx = (sc + 0.5) * 9.0 + (hash(vec2(sc, 5.0)) - 0.5) * 5.0;
+      float hgt = sin(ph * 3.14159) * 8.0;
+      float a = 0.0;
+      for (int k = -1; k <= 1; k += 2) {
+        vec2 d = vec2(p.x - (sx + float(k) * ph * 6.0), p.y - (gTop - hgt));
+        a = max(a, 1.0 - smoothstep(0.4, 1.2, length(d)));
+      }
+      a *= on * (1.0 - ph);
+      outCol.rgb = mix(outCol.rgb, vec3(0.7, 0.8, 0.95), a * 0.8);
+      outCol.a = max(outCol.a, a);
+    }
+
+    // the wet sidewalk and curb, mirroring the lit windows above
+    if (p.y > gTop) {
+      float gy = p.y - gTop;
+      vec3 g = vec3(0.045, 0.052, 0.07) * (0.85 + 0.3 * vnoise(p * vec2(0.08, 0.3)));
+      g = mix(g, vec3(0.17, 0.18, 0.21), 1.0 - smoothstep(1.5, 3.0, gy)); // lit curb edge
+      g *= 1.0 - 0.35 * smoothstep(${(GROUND_H - 10).toFixed(1)}, ${GROUND_H.toFixed(1)}, gy); // curb face
+      float c = floor(p.x / 22.0);
+      float h = hash(vec2(c, 9.0));
+      float wob = vnoise(vec2(p.x * 0.15, gy * 0.4 - uTime * 2.0));
+      g += AMBER * step(0.72, h) * 0.16 * (1.0 - gy / ${GROUND_H.toFixed(1)}) * (0.5 + 0.5 * wob);
+      g += vec3(0.25, 0.4, 0.9) * step(0.95, h) * 0.12 * (1.0 - gy / ${GROUND_H.toFixed(1)}) * (0.5 + 0.5 * wob);
+      outCol = vec4(g, 1.0);
+    }
     gl_FragColor = outCol;
   }
 `;
@@ -538,8 +568,8 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
     gm.visible = visible;
     // the distant skyline rises from just behind the mid-ground row
     s.roofY = rect.top + L.skyTop + (L.height - L.skyTop) * 0.2;
-    // the pool picks up where the buildings start to dissolve
-    s.streetTop = rect.top + window.scrollY + L.height - STREET_FADE;
+    // the pool starts under the curb, at the bottom of the city
+    s.streetTop = rect.top + window.scrollY + L.height;
     if (!visible) return;
     const k = worldPerPixel(size.height, 0);
     const [cx, cy] = pxToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2, size.width, size.height, 0);

@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { rainStore } from "./store";
 import { CAMERA_Z, worldPerPixel } from "./quality";
 import { umbrellaState } from "./Umbrella";
-import { POOL_H } from "./layout";
+import { GROUND_H } from "./layout";
 
 const vertexShader = /* glsl */ `
   attribute vec4 aSeed;   // x offset, phase, depth, visibility threshold
@@ -21,7 +21,7 @@ const vertexShader = /* glsl */ `
   uniform vec3 uUmb;       // umbrella rim centre (x, y) on z = 0 plane, z = active
   uniform vec2 uUmbShape;  // radius, canopy height
   uniform float uUmbTilt;
-  uniform float uStopY;    // z = 0 plane y below which it stops raining (the grotto ceiling)
+  uniform float uStopY;    // z = 0 plane y below which it stops raining (the sidewalk)
 
   varying float vAlpha;
   varying float vT;
@@ -47,13 +47,15 @@ const vertexShader = /* glsl */ `
     // shelter fades out far below the umbrella, as wind blows rain back in
     float shelter = under * (1.0 - smoothstep(r * 2.6, r * 4.0, depthBelow)) * uUmb.z;
     visible *= 1.0 - shelter;
-    // no rain inside the grotto under the pool
-    visible *= smoothstep(uStopY - uPx * 30.0, uStopY, p0.y);
 
     vec2 dir = normalize(vec2(uWind, -1.0));
     vec2 perp = vec2(-dir.y, dir.x);
     float len = aMotion.y * uView.y * (0.65 + 0.5 * uIntensity);
     float width = uPx * mix(1.4, 2.6, smoothstep(-8.0, 6.0, z));
+
+    // the rain lands on the sidewalk under the buildings and stops there (test the streak's lower tip)
+    float tipY = (y + dir.y * len * 0.5) / depthScale;
+    visible *= step(uStopY, tipY);
 
     vec2 pos = vec2(x, y) + perp * position.x * width + dir * position.y * len;
     pos *= visible;
@@ -135,8 +137,8 @@ export default function Rain({ count }: { count: number }) {
     u.uUmbShape.value.set(umbrellaState.radius, umbrellaState.height);
     u.uUmbTilt.value = umbrellaState.tilt;
     u.uFlash.value = rainStore.flash;
-    // where the waterfalls start, in world y on the z = 0 plane
-    const stopPx = rainStore.streetTop + POOL_H - window.scrollY;
+    // the sidewalk under the buildings, in world y on the z = 0 plane
+    const stopPx = rainStore.streetTop - GROUND_H * 0.6 - window.scrollY;
     u.uStopY.value = Number.isFinite(stopPx) ? -(stopPx - size.height / 2) * k : -1e5;
   });
 

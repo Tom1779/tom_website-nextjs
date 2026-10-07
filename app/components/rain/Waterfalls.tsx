@@ -81,7 +81,7 @@ const fragmentShader = /* glsl */ `
     vec2 sp = vec2(vUv.x * uView.x, (1.0 - vUv.y) * uView.y);
     vec2 p = vec2(sp.x, sp.y + uScroll); // document space
     float depth = p.y - uTop;
-    if (depth < -60.0) { gl_FragColor = vec4(0.0); return; }
+    if (depth < 0.0) { gl_FragColor = vec4(0.0); return; }
 
     float W = uView.x;
     float side = p.x < W * 0.5 ? -1.0 : 1.0;
@@ -104,11 +104,11 @@ const fragmentShader = /* glsl */ `
       float streak = smoothstep(0.5, 0.85, fbm(vec2((p.x + wob) * 0.06, p.y * 0.012 - uTime * 0.05)));
       col += lc * streak * step(0.45, h) * 0.35 * (1.0 - depth / poolH);
       col += FOAM * smoothstep(0.62, 0.8, vnoise(vec2(q.x * 0.03, p.y * 0.25))) * 0.05;
-      vec2 rc = floor(p / 60.0);
-      vec2 rf = p - rc * 60.0 - 30.0;
-      float age = fract(uTime * 0.9 + hash(rc) * 4.0);
-      vec2 rpos = (vec2(hash(rc + 1.7), hash(rc + 3.1)) - 0.5) * 34.0;
-      col += vec3(0.5, 0.6, 0.8) * exp(-abs(length((rf - rpos) * vec2(1.0, 2.6)) - age * 20.0) * 1.3) * (1.0 - age) * 0.18;
+      // stone embankment under the curb, with the water lapping at it
+      float lap = 3.0 * sin(p.x * 0.05 + uTime * 1.5);
+      float bank = 1.0 - smoothstep(12.0 + lap, 15.0 + lap, depth);
+      col = mix(col, vec3(0.06, 0.065, 0.08) * (0.8 + 0.4 * vnoise(p * 0.15)), bank);
+      col += FOAM * 0.12 * exp(-abs(depth - 14.0 - lap) / 2.0);
     } else {
       // ---- the grotto ----
       // layered, warm rock; cooler and wetter toward the falls
@@ -249,7 +249,7 @@ const fragmentShader = /* glsl */ `
     }
 
     col += vec3(0.3, 0.33, 0.45) * uFlash * 0.25;
-    gl_FragColor = vec4(col, smoothstep(-60.0, 80.0, depth));
+    gl_FragColor = vec4(col, 1.0);
   }
 `;
 
