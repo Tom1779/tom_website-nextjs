@@ -5,7 +5,7 @@ export const MAX_BUILDINGS = 8;
 export const MAX_PROJECT_WINDOWS = 16;
 
 export const GROUND_H = 46; // wet sidewalk + curb the buildings stand on
-export const ROAD_H = 120; // wet road in front of the sidewalk, at the very bottom of the city
+export const POOL_H = 220; // the pool the rain gathers in, in front of the sidewalk, at the bottom of the city
 
 export interface Building {
   x: number;
@@ -94,7 +94,7 @@ export function computeCityLayout(width: number, count: number, skyTop: number, 
   // every building stands on the same sidewalk; it sits low enough for the lowest roof to fit all storeys
   const storeys = projRows + billboardRows;
   let baseY = Math.max(...tops) + pad.top + storeys * stepY - gap.y + Math.round(gap.y * 0.6) + plinthH;
-  let height = baseY + GROUND_H + ROAD_H;
+  let height = baseY + GROUND_H + POOL_H;
   if (height < minHeight) {
     baseY += minHeight - height;
     height = minHeight;

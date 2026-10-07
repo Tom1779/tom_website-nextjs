@@ -438,37 +438,41 @@ const fragmentShader = /* glsl */ `
       float h = hash(vec2(c, 9.0));
       float wob = vnoise(vec2(p.x * 0.15, gy * 0.4 - uTime * 2.0));
       g += AMBER * step(0.72, h) * 0.14 * (gy / ${GROUND_H.toFixed(1)}) * (0.5 + 0.5 * wob);
-      // curb: lit top edge and a darker face down to the road
+      // curb: lit top edge and a darker face down to the water
       float cy = gy - (${GROUND_H.toFixed(1)} - 12.0);
       g = mix(g, vec3(0.19, 0.2, 0.23), (1.0 - smoothstep(1.0, 2.5, abs(cy))) * step(-2.0, cy));
       g = mix(g, vec3(0.06, 0.065, 0.08), step(2.5, cy));
       outCol = vec4(g, 1.0);
     }
 
-    // the wet road: deep puddles mirroring the lit windows above, a worn lane line
+    // the pool the rain gathers in: dark water mirroring the city, flowing gently, between stone edges
     if (p.y > roadTop) {
       float ry = p.y - roadTop;
       float rH = uSize.y - roadTop;
-      vec3 r = vec3(0.025, 0.03, 0.042) * (0.85 + 0.3 * vnoise(p * vec2(0.05, 0.2)));
-      float puddle = smoothstep(0.5, 0.62, fbm(p * vec2(0.006, 0.03) + 2.0));
-      // reflections of the city lights, stretched downward and wobbling
-      float c = floor(p.x / 26.0);
-      float h = hash(vec2(c, 9.0));
-      vec3 lc = h > 0.9 ? vec3(0.3, 0.45, 0.95) : AMBER;
-      float wob = sin(p.y * 0.09 + uTime * 1.7 + c) * (1.5 + 3.0 * puddle);
-      float streak = smoothstep(0.45, 0.85, fbm(vec2((p.x + wob) * 0.08, ry * 0.02 - uTime * 0.05)));
-      r += lc * step(0.6, h) * streak * (0.08 + 0.22 * puddle) * (1.0 - ry / rH * 0.6);
-      r += vec3(0.04, 0.05, 0.07) * puddle;
-      // lane line, faded and broken
-      float lane = (1.0 - smoothstep(1.2, 2.2, abs(ry - rH * 0.55))) * step(0.45, fract(p.x / 90.0));
-      r = mix(r, vec3(0.45, 0.4, 0.25) * 0.4, lane * (1.0 - puddle * 0.7));
-      // fade into the page below
-      r *= 1.0 - smoothstep(rH - 40.0, rH, ry) * 0.6;
+      vec2 q = vec2(p.x + uTime * 30.0 * sign(p.x - uSize.x * 0.5), p.y);
+      float surf = fbm(q * vec2(0.012, 0.06));
+      vec3 r = vec3(0.03, 0.065, 0.1) * (0.8 + 0.5 * surf);
+      // reflections of the lit windows above, wobbling on the surface
+      float c = floor(p.x / 38.0);
+      float h = hash(vec2(c, 5.0));
+      vec3 lc = h > 0.82 ? vec3(0.25, 0.42, 0.9) : AMBER;
+      float wob = sin(p.y * 0.08 + uTime * 1.6 + c) * 3.0;
+      float streak = smoothstep(0.5, 0.85, fbm(vec2((p.x + wob) * 0.06, p.y * 0.012 - uTime * 0.05)));
+      r += lc * streak * step(0.45, h) * 0.35 * (1.0 - ry / rH * 0.7);
+      r += vec3(0.78, 0.88, 1.0) * smoothstep(0.62, 0.8, vnoise(vec2(q.x * 0.03, p.y * 0.25))) * 0.05;
+      // stone embankment under the curb, with the water lapping at it
+      float lap = 3.0 * sin(p.x * 0.05 + uTime * 1.5);
+      float bank = 1.0 - smoothstep(12.0 + lap, 15.0 + lap, ry);
+      r = mix(r, vec3(0.06, 0.065, 0.08) * (0.8 + 0.4 * vnoise(p * 0.15)), bank);
+      r += vec3(0.78, 0.88, 1.0) * 0.12 * exp(-abs(ry - 14.0 - lap) / 2.0);
+      // the pool's far stone lip, where the page ends
+      float lip = smoothstep(rH - 12.0, rH - 9.0, ry);
+      r = mix(r, vec3(0.08, 0.085, 0.1) * (1.0 + 0.8 * (1.0 - smoothstep(rH - 10.0, rH - 7.0, ry))), lip);
       outCol = vec4(r, 1.0);
     }
 
     // rain hitting the ground: a bright impact, a crown of droplets, and a ripple ring.
-    // Rows run from the sidewalk to the far edge of the road (bigger toward the front).
+    // Rows run from the sidewalk to the far edge of the pool (bigger toward the front).
     if (p.y > gTop - 26.0) {
       vec3 hit = vec3(0.0);
       float ha = 0.0;
@@ -689,7 +693,7 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
     gm.visible = visible;
     // the distant skyline rises from just behind the mid-ground row
     s.roofY = rect.top + L.skyTop + (L.height - L.skyTop) * 0.2;
-    // the far edge of the road, where the rain stops
+    // the pool's far edge, where the rain stops
     s.streetTop = rect.top + window.scrollY + L.height;
     if (!visible) return;
     const k = worldPerPixel(size.height, 0);

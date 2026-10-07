@@ -40,7 +40,7 @@ export const rainStore = {
   intensity: 0.5,
   // client-px y where the distant skyline should sit (NaN when not laid out yet)
   roofY: NaN,
-  // document-px y of the far edge of the road at the bottom of the city (NaN when not laid out yet)
+  // document-px y of the pool's far edge at the bottom of the city (NaN when not laid out yet)
   streetTop: NaN,
 };
 

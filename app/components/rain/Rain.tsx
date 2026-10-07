@@ -20,7 +20,7 @@ const vertexShader = /* glsl */ `
   uniform vec3 uUmb;       // umbrella rim centre (x, y) on z = 0 plane, z = active
   uniform vec2 uUmbShape;  // radius, canopy height
   uniform float uUmbTilt;
-  uniform float uStopY;    // z = 0 plane y where the rain stops (the far edge of the road)
+  uniform float uStopY;    // z = 0 plane y where the rain stops (the pool's far edge)
 
   varying float vAlpha;
   varying float vT;
@@ -53,7 +53,7 @@ const vertexShader = /* glsl */ `
     float width = uPx * mix(1.4, 2.6, smoothstep(-8.0, 6.0, z));
 
     // the rain lands on the sidewalk under the buildings and stops there (test the streak's lower tip)
-    // the rain falls over the street and stops at the far edge of the road (test the streak's lower tip)
+    // the rain falls over the pool and stops at the pool's far edge (test the streak's lower tip)
     float tipY = (y + dir.y * len * 0.5) / depthScale;
     visible *= step(uStopY, tipY);
 
@@ -138,7 +138,7 @@ export default function Rain({ count }: { count: number }) {
     u.uUmbTilt.value = umbrellaState.tilt;
     u.uFlash.value = rainStore.flash;
     // the sidewalk under the buildings, in world y on the z = 0 plane
-    const stopPx = rainStore.streetTop - 8 - window.scrollY;
+    const stopPx = rainStore.streetTop - 12 - window.scrollY;
     u.uStopY.value = Number.isFinite(stopPx) ? -(stopPx - size.height / 2) * k : -1e5;
   });
 

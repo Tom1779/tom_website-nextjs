@@ -21,7 +21,7 @@ const socialLinks: FooterLink[] = [
 
 export default function Footer() {
   return (
-    <footer className="w-full bg-gray-900 text-white border-t border-gray-700">
+    <footer className="relative z-10 w-full bg-gray-900 text-white border-t border-gray-700">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         <div className="flex flex-col items-center space-y-4 sm:space-y-6">
           {/* Social Links */}
