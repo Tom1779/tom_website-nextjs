@@ -30,6 +30,7 @@ const fragmentShader = /* glsl */ `
   uniform float uTime;
   uniform float uNow;       // seconds, same clock as the ripple timestamps
   uniform float uFlash;
+  uniform float uRain;    // 0..1 rain heaviness
   uniform vec2 uMouse;      // cursor in document px (x < 0 when unknown)
   uniform vec3 uRip[MAXR];  // cursor ripples: x, document y, start time
   varying vec2 vUv;
@@ -104,6 +105,44 @@ const fragmentShader = /* glsl */ `
       float streak = smoothstep(0.5, 0.85, fbm(vec2((p.x + wob) * 0.06, p.y * 0.012 - uTime * 0.05)));
       col += lc * streak * step(0.45, h) * 0.35 * (1.0 - depth / poolH);
       col += FOAM * smoothstep(0.62, 0.8, vnoise(vec2(q.x * 0.03, p.y * 0.25))) * 0.05;
+
+      // rain landing in the pool: rings spreading on the surface, a little splash column and droplets
+      float rowH = 26.0;
+      float row = floor(depth / rowH);
+      for (int dr = -1; dr <= 1; dr++) {
+        float r = row + float(dr);
+        if (r < 0.0) continue;
+        float persp = 0.6 + 0.4 * clamp((r * rowH) / poolH, 0.0, 1.0); // nearer (lower) rows look bigger
+        float cw = 34.0 * persp;
+        float baseC = floor((p.x + r * 13.0) / cw);
+        for (int n = -1; n <= 1; n++) {
+          float cell = baseC + float(n);
+          vec2 id = vec2(cell, r * 7.0);
+          float tt = uTime * (1.2 + hash(id) * 1.0) + hash(id + 3.0) * 9.0;
+          float age = fract(tt);
+          float k = floor(tt);
+          if (hash(id + k * 1.37) > 0.3 + 0.6 * uRain) continue;
+          vec2 I = vec2((cell + 0.15 + 0.7 * hash(id + k + 5.0)) * cw - r * 13.0,
+                        uTop + (r + 0.2 + 0.6 * hash(id + k + 7.0)) * rowH);
+          vec2 d = p - I;
+          // two rings: a fast outer one and a slower inner one
+          float rr = age * 22.0 * persp;
+          float ring = exp(-abs(length(d * vec2(1.0, 3.0)) - rr) * 1.1) * (1.0 - age)
+                     + 0.5 * exp(-abs(length(d * vec2(1.0, 3.0)) - rr * 0.55) * 1.4) * (1.0 - age);
+          // the drop's splash column and a couple of droplets, only right after impact
+          float splash = 0.0;
+          if (age < 0.35) {
+            float ca = age / 0.35;
+            float colH = sin(ca * 3.14159) * 9.0 * persp;
+            splash = (1.0 - smoothstep(0.6, 1.3, abs(d.x))) * step(-colH, d.y) * step(d.y, 0.5) * (1.0 - ca);
+            for (int j = -1; j <= 1; j += 2) {
+              vec2 dp = I + vec2(float(j) * (2.0 + ca * 9.0) * persp, -sin(ca * 3.14159) * 3.5 * persp);
+              splash = max(splash, (1.0 - smoothstep(0.6, 1.4, length(p - dp))) * (1.0 - ca));
+            }
+          }
+          col += vec3(0.6, 0.72, 0.9) * (ring * 0.32 + splash * 0.75);
+        }
+      }
       // stone embankment under the curb, with the water lapping at it
       float lap = 3.0 * sin(p.x * 0.05 + uTime * 1.5);
       float bank = 1.0 - smoothstep(12.0 + lap, 15.0 + lap, depth);
@@ -266,6 +305,7 @@ export default function Waterfalls() {
       uTime: { value: 0 },
       uNow: { value: 0 },
       uFlash: { value: 0 },
+      uRain: { value: 0.5 },
       uMouse: { value: new THREE.Vector2(-1, -1) },
       uRip: { value: Array.from({ length: MAX_RIPPLES }, () => new THREE.Vector3(0, 0, -100)) },
     }),
@@ -293,6 +333,7 @@ export default function Waterfalls() {
     u.uTime.value = state.clock.elapsedTime;
     u.uNow.value = performance.now() / 1000;
     u.uFlash.value = rainStore.flash;
+    u.uRain.value = rainStore.intensity;
     u.uMouse.value.set(ptr.seen ? ptr.x : -1, ptr.y + window.scrollY);
     rainStore.ripples.forEach((r, i) => u.uRip.value[i].set(r.x, r.y, r.t));
   });

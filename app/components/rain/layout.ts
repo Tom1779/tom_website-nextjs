@@ -44,7 +44,7 @@ function mulberry32(seed: number) {
 }
 
 export const STREET_FADE = 130; // bottom px of ordinary ground floors (projects stay above them)
-export const GROUND_H = 34; // wet sidewalk + curb the buildings stand on, at the bottom of the city
+export const GROUND_H = 46; // wet sidewalk + curb the buildings stand on, at the bottom of the city
 export const POOL_H = 220; // px of pool under the city before the water spills over the sides
 
 /** Height of the city container: at least the first screen, tall enough for two storeys of big windows. */

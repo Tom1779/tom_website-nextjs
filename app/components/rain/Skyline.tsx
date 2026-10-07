@@ -41,6 +41,7 @@ const fragmentShader = /* glsl */ `
   uniform float uAtlasReady;
   uniform float uTime;
   uniform float uFlash;
+  uniform float uRain;      // 0..1 rain heaviness
   uniform float uPass;      // 0: buildings + rooms, 1: project-window glass (drawn over the pixel clouds)
   varying vec2 vUv;
 
@@ -368,23 +369,6 @@ const fragmentShader = /* glsl */ `
     // a little rain haze down at street level
     outCol.rgb = mix(outCol.rgb, HAZE * 1.1, smoothstep(gTop - 160.0, gTop, p.y) * 0.25 * outCol.a);
 
-    // rain splashing where it hits the ground: tiny crowns jumping off the curb
-    if (p.y > gTop - 12.0 && p.y < gTop + 6.0) {
-      float sc = floor(p.x / 9.0);
-      float ph = fract(uTime * 2.6 + hash(vec2(sc, 3.0)) * 7.0);
-      float on = step(0.55, hash(vec2(sc, floor(uTime * 2.6 + hash(vec2(sc, 3.0)) * 7.0))));
-      float sx = (sc + 0.5) * 9.0 + (hash(vec2(sc, 5.0)) - 0.5) * 5.0;
-      float hgt = sin(ph * 3.14159) * 8.0;
-      float a = 0.0;
-      for (int k = -1; k <= 1; k += 2) {
-        vec2 d = vec2(p.x - (sx + float(k) * ph * 6.0), p.y - (gTop - hgt));
-        a = max(a, 1.0 - smoothstep(0.4, 1.2, length(d)));
-      }
-      a *= on * (1.0 - ph);
-      outCol.rgb = mix(outCol.rgb, vec3(0.7, 0.8, 0.95), a * 0.8);
-      outCol.a = max(outCol.a, a);
-    }
-
     // the wet sidewalk and curb, mirroring the lit windows above
     if (p.y > gTop) {
       float gy = p.y - gTop;
@@ -397,6 +381,54 @@ const fragmentShader = /* glsl */ `
       g += AMBER * step(0.72, h) * 0.16 * (1.0 - gy / ${GROUND_H.toFixed(1)}) * (0.5 + 0.5 * wob);
       g += vec3(0.25, 0.4, 0.9) * step(0.95, h) * 0.12 * (1.0 - gy / ${GROUND_H.toFixed(1)}) * (0.5 + 0.5 * wob);
       outCol = vec4(g, 1.0);
+    }
+
+    // raindrops hitting the sidewalk: a bright impact, a crown of droplets, and a ripple ring
+    if (p.y > gTop - 26.0) {
+      vec3 hit = vec3(0.0);
+      float ha = 0.0;
+      float depthPx = ${GROUND_H.toFixed(1)} - 10.0;
+      for (int layer = 0; layer < 3; layer++) {
+        float fl = float(layer);
+        float cw = 23.0 + fl * 7.0;                 // impacts per row, spread a little differently per layer
+        float rowY = gTop + 5.0 + depthPx * (fl + 0.5) / 3.0;
+        float baseC = floor((p.x + fl * 11.0) / cw);
+        for (int n = -1; n <= 1; n++) {
+          float cell = baseC + float(n);
+          vec2 id = vec2(cell, fl * 17.0);
+          float rate = 1.5 + hash(id) * 1.2;          // impacts per second in this cell
+          float tt = uTime * rate + hash(id + 3.0) * 9.0;
+          float age = fract(tt);
+          // how busy the ground is follows the rain intensity
+          if (hash(id + floor(tt) * 1.37) > 0.25 + 0.6 * uRain) continue;
+          vec2 I = vec2((cell + 0.2 + 0.6 * hash(id + floor(tt) + 5.0)) * cw - fl * 11.0,
+                        rowY + (hash(id + floor(tt) + 7.0) - 0.5) * depthPx / 3.0);
+          float near = 0.65 + 0.35 * (I.y - gTop) / ${GROUND_H.toFixed(1)}; // nearer rows are a bit bigger
+          vec2 d = p - I;
+          // impact flash
+          float fl0 = exp(-length(d) / 1.6) * max(0.0, 1.0 - age * 5.0);
+          // ripple ring on the wet pavement (flattened by perspective)
+          float ringR = age * 18.0 * near;
+          float ring = exp(-abs(length(d * vec2(1.0, 3.4)) - ringR) * 1.3) * (1.0 - age) * step(gTop, p.y);
+          // crown: droplets thrown up and out, falling back down
+          float crown = 0.0;
+          if (age < 0.55) {
+            float ca = age / 0.55;
+            for (int k = 0; k < 5; k++) {
+              float fk = float(k) - 2.0;
+              float hk = hash(id + vec2(fk, floor(tt)));
+              vec2 dp = I + vec2(fk * (3.0 + 2.0 * hk) * ca * near, -sin(ca * 3.14159) * (5.0 + 9.0 * hk) * near);
+              crown = max(crown, 1.0 - smoothstep(0.7, 1.6, length(p - dp)));
+            }
+            crown *= 1.0 - ca * 0.6;
+          }
+          float a = clamp(fl0 * 1.2 + ring * 0.8 + crown, 0.0, 1.0);
+          hit = max(hit, vec3(0.72, 0.82, 0.98) * a);
+          ha = max(ha, a);
+        }
+      }
+      outCol.rgb = mix(outCol.rgb, hit / max(ha, 0.001), ha * 0.85);
+      outCol.a = max(outCol.a, ha);
     }
     gl_FragColor = outCol;
   }
@@ -473,6 +505,7 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
 
   const makeUniforms = (pass: number) => ({
     uPass: { value: pass },
+    uRain: { value: 0.5 },
     uSize: { value: new THREE.Vector2(1, 1) },
     uSkyTop: { value: 0 },
     uWin: { value: new THREE.Vector2(1, 1) },
@@ -610,6 +643,7 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
       u.uAtlasReady.value = atlas ? 1 : 0;
       u.uTime.value = state.clock.elapsedTime;
       u.uFlash.value = s.flash;
+      u.uRain.value = s.intensity;
     }
   });
 
