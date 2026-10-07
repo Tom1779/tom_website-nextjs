@@ -29,8 +29,7 @@ const fragmentShader = /* glsl */ `
   uniform vec2 uSize;
   uniform float uSkyTop;
   uniform float uBase;      // top of the sidewalk: every building stands here
-  uniform float uPlinth;
-  uniform float uMinW;      // narrowest foreground building, so the shared ground floor fits all of them    // ground-floor (lobby) height
+  uniform float uPlinth;    // ground-floor (lobby) height
   uniform vec4 uBill;       // résumé billboard rect (x, y, w, h)
   uniform vec2 uWin;
   uniform vec2 uGap;
@@ -265,10 +264,10 @@ const fragmentShader = /* glsl */ `
     return P;
   }
 
-  // The ground floor every building stands on: stone base, a lit lobby door under a canopy, shop windows
+  // The ground floor every building stands on: stone base and an entrance under a canopy
   vec3 groundFloor(vec2 p, vec4 B, float top) {
-    // identical on every building: same stone, a centred lobby door under a canopy, and a matching
-    // pair of lit shop windows either side (no per-building colour, randomness or haze)
+    // identical on every building: plain stone with a centred entrance under a canopy
+    // (no per-building colour, randomness or haze)
     float gy = p.y - top;               // 0 at the top of the ground floor
     float H = uBase - top;
     float dx = p.x - (B.x + B.z * 0.5); // from the centre of the building
@@ -278,17 +277,11 @@ const fragmentShader = /* glsl */ `
     col = mix(col, vec3(0.16, 0.17, 0.2), 1.0 - smoothstep(4.0, 6.0, gy));
     float doorW = uWin.x * 0.95;
     float doorTop = H * 0.28;
-    // the entrance: a lit transom, two dark doors with glass panes and push handles, a step, wall lamps
+    // the entrance: two dark doors with glass panes and push handles, a step, wall lamps
     vec3 DARK = vec3(0.045, 0.04, 0.045);
-    float transomH = (H - doorTop) * 0.2;
-    float leafTop = doorTop + transomH;
-    float inFrame = step(ax, doorW * 0.5 + 3.0) * step(doorTop - 3.0, gy) * step(gy, H - 6.0);
+    float leafTop = doorTop + (H - doorTop) * 0.2; // stone above the doors, under the canopy
+    float inFrame = step(ax, doorW * 0.5 + 3.0) * step(leafTop - 3.0, gy) * step(gy, H - 6.0);
     col = mix(col, DARK, inFrame);                                                   // surround
-    if (ax < doorW * 0.5 && gy > doorTop && gy < leafTop - 2.0) {
-      col = vec3(1.0, 0.8, 0.5) * 0.85;                                             // lit transom
-      float bar = 1.0 - step(1.0, abs(abs(dx) - doorW / 6.0));                      // two glazing bars
-      col = mix(col, DARK, bar);
-    }
     if (ax < doorW * 0.5 - 1.5 && gy > leafTop && gy < H - 6.0) {
       float lx = mod(dx + doorW * 0.5, doorW * 0.5);                                // x inside one leaf
       float lw = doorW * 0.5;
@@ -310,7 +303,9 @@ const fragmentShader = /* glsl */ `
     // canopy over the entrance, lit from beneath
     float canopy = step(ax, doorW * 0.85) * step(doorTop - 10.0, gy) * step(gy, doorTop - 4.0);
     col = mix(col, vec3(0.04, 0.042, 0.05), canopy);
-    col += vec3(1.0, 0.75, 0.45) * 0.18 * exp(-max(gy - doorTop, 0.0) / 30.0) * step(doorTop, gy) * step(doorW * 0.5 + 3.0, ax) * step(ax, doorW * 1.3);
+    // soft pool of light from the canopy onto the wall around the entrance
+    vec2 sp = vec2(ax / (doorW * 1.1), max(gy - doorTop, 0.0) / (H * 0.6));
+    col += vec3(1.0, 0.75, 0.45) * 0.14 * exp(-dot(sp, sp) * 2.5) * step(doorTop, gy) * (1.0 - inFrame);
     // wall lamps either side of the entrance
     vec2 lampP = vec2(ax - (doorW * 0.5 + 10.0), gy - (leafTop + 6.0));
     float lamp = 1.0 - smoothstep(2.5, 3.5, length(lampP * vec2(1.0, 0.7)));
@@ -319,16 +314,6 @@ const fragmentShader = /* glsl */ `
     // a step in front of the door
     col = mix(col, vec3(0.22, 0.23, 0.26), step(ax, doorW * 0.5 + 6.0) * step(H - 6.0, gy) * step(gy, H - 2.0));
 
-    // one fixed-size, lit shop window each side of the door
-    float sgap = uWin.x * 0.35 + 8.0;
-    float sw = min(uWin.x * 1.25, uMinW * 0.5 - doorW * 0.5 - sgap - uPad.x * 0.6);
-    float sx = ax - doorW * 0.5 - sgap;
-    if (sx > 0.0 && sx < sw && gy > doorTop && gy < H - 8.0) {
-      vec3 shop = vec3(0.9, 0.7, 0.45) * (0.42 + 0.18 * (1.0 - (gy - doorTop) / (H - doorTop)));
-      shop = mix(shop, vec3(0.05, 0.05, 0.06), 1.0 - step(1.5, min(sx, sw - sx)));             // frame
-      shop = mix(shop, vec3(0.05, 0.05, 0.06), 1.0 - step(1.0, abs(sx - sw * 0.5)));           // mullion
-      col = shop;
-    }
     // a lit step / foundation at the very bottom where the building meets the sidewalk
     col = mix(col, vec3(0.2, 0.21, 0.24), smoothstep(H - 6.0, H - 4.0, gy));
     return col;
@@ -632,7 +617,6 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
     uSkyTop: { value: 0 },
     uBase: { value: 0 },
     uPlinth: { value: 0 },
-    uMinW: { value: 0 },
     uBill: { value: new THREE.Vector4() },
     uWin: { value: new THREE.Vector2(1, 1) },
     uGap: { value: new THREE.Vector2(1, 1) },
@@ -751,7 +735,6 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
       u.uSkyTop.value = L.skyTop;
       u.uBase.value = L.baseY;
       u.uPlinth.value = L.plinthH;
-      u.uMinW.value = Math.min(...L.buildings.map((b) => b.w));
       if (L.billboard) u.uBill.value.set(L.billboard.x, L.billboard.y, L.billboard.w, L.billboard.h);
       else u.uBill.value.set(0, 0, 0, 0);
       u.uWin.value.set(L.win.w, L.win.h);
