@@ -178,8 +178,8 @@ body {
     cursor: none;
   }
   /* ...until a pane has dried: then it's a link, so show the hand */
-  .umbrella-zone a[data-revealed],
-  .umbrella-zone a[data-revealed] * {
+  .umbrella-zone [data-revealed],
+  .umbrella-zone [data-revealed] * {
     cursor: pointer;
   }
 }

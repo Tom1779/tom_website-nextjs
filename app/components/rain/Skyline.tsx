@@ -28,6 +28,9 @@ const fragmentShader = /* glsl */ `
   #define MAXP ${MAX_PROJECTS}
   uniform vec2 uSize;
   uniform float uSkyTop;
+  uniform float uBase;      // top of the sidewalk: every building stands here
+  uniform float uPlinth;    // ground-floor (lobby) height
+  uniform vec4 uBill;       // résumé billboard rect (x, y, w, h)
   uniform vec2 uWin;
   uniform vec2 uGap;
   uniform vec2 uPad;
@@ -261,10 +264,46 @@ const fragmentShader = /* glsl */ `
     return P;
   }
 
+  // The ground floor every building stands on: stone base, a lit lobby door under a canopy, shop windows
+  vec3 groundFloor(vec2 p, vec4 B, float top, float seed) {
+    float gy = p.y - top;               // 0 at the top of the ground floor
+    float H = uBase - top;
+    float lx = p.x - B.x;
+    vec3 col = mix(vec3(0.075, 0.08, 0.1), vec3(0.1, 0.105, 0.125), seed) * (0.85 + 0.25 * vnoise(p * 0.08));
+    // cornice band separating it from the storeys above
+    col = mix(col, vec3(0.16, 0.17, 0.2), 1.0 - smoothstep(4.0, 6.0, gy));
+    // lobby door in the middle of the building, warm light inside
+    float doorW = uWin.x * 0.95;
+    float dx = lx - B.z * 0.5;
+    float doorTop = H * 0.28;
+    float inDoor = step(abs(dx), doorW * 0.5) * step(doorTop, gy);
+    vec3 lobby = vec3(1.0, 0.78, 0.48) * (0.55 + 0.35 * (gy - doorTop) / (H - doorTop));
+    lobby = mix(lobby, vec3(0.05, 0.05, 0.06), 1.0 - step(1.6, abs(dx)));           // door split
+    lobby = mix(lobby, vec3(0.05, 0.05, 0.06), 1.0 - step(2.0, doorW * 0.5 - abs(dx))); // frame
+    col = mix(col, lobby, inDoor);
+    // canopy over the door, lit from beneath
+    float canopy = step(abs(dx), doorW * 0.85) * step(doorTop - 9.0, gy) * step(gy, doorTop - 3.0);
+    col = mix(col, vec3(0.04, 0.042, 0.05), canopy);
+    col += vec3(1.0, 0.75, 0.45) * 0.25 * exp(-max(gy - doorTop, 0.0) / 30.0) * step(doorTop, gy) * step(abs(dx), doorW * 1.4) * (1.0 - inDoor);
+    // shop windows either side of the door
+    float sw = (B.z - doorW * 2.4) * 0.5 - uPad.x;
+    float sx = abs(dx) - doorW * 1.2;
+    if (sw > 20.0 && sx > 0.0 && sx < sw && gy > doorTop && gy < H - 8.0) {
+      float lit = step(0.4, hash(vec2(seed, sign(dx))));
+      vec3 shop = lit > 0.5 ? vec3(0.9, 0.7, 0.45) * (0.35 + 0.2 * vnoise(p * 0.05)) : vec3(0.03, 0.035, 0.05);
+      shop = mix(shop, vec3(0.05, 0.05, 0.06), 1.0 - step(1.5, min(sx, sw - sx)));
+      col = shop;
+    }
+    // a lit step / foundation at the very bottom where the building meets the sidewalk
+    col = mix(col, vec3(0.2, 0.21, 0.24), smoothstep(H - 6.0, H - 4.0, gy));
+    return col;
+  }
+
   void main() {
     vec2 p = vec2(vUv.x * uSize.x, (1.0 - vUv.y) * uSize.y);
     float fade = 1.0;
-    float gTop = uSize.y - ${GROUND_H.toFixed(1)}; // the sidewalk the buildings stand on
+    float gTop = uBase; // the sidewalk the buildings stand on
+    float roadTop = uBase + ${GROUND_H.toFixed(1)};
 
     // a light pass finds which project window (if any) this pixel is in and gathers the halos;
     // the expensive shading then runs once, outside the loop (keeps the shader compilable on D3D)
@@ -335,14 +374,34 @@ const fragmentShader = /* glsl */ `
       vec2 cell = floor(wl / stepPx);
       vec2 wp = wl - cell * stepPx;
       float cols = floor((B.z - 2.0 * uPad.x + uGap.x) / stepPx.x);
-      float inGrid = step(0.0, cell.x) * step(cell.x, cols - 1.0) * step(0.0, cell.y);
-      if (inGrid > 0.5 && wp.x < uWin.x && wp.y < uWin.y) {
+      float plinthTop = uBase - uPlinth;
+      // storeys only above the ground floor, and only whole windows (none cut off by the lobby)
+      float inGrid = step(0.0, cell.x) * step(cell.x, cols - 1.0) * step(0.0, cell.y)
+                   * step(B.y + uPad.y + (cell.y + 1.0) * stepPx.y - uGap.y, plinthTop - 6.0);
+      if (p.y >= plinthTop) {
+        col = groundFloor(p, B, plinthTop, seed);
+      } else if (inGrid > 0.5 && wp.x < uWin.x && wp.y < uWin.y) {
         col = apartment(wp, cell + seed * 97.0);
       } else if (step(0.0, cell.y) > 0.5 && lp.x > 2.0 && lp.x < B.z - 3.0) {
         // floor slab between storeys, with a little rain-shadow under it
         float sy = wp.y - uWin.y - uGap.y * 0.3;
         col = mix(col, col * 1.6, step(0.0, sy) * (1.0 - step(3.0, sy)));
         col *= 1.0 - 0.25 * step(3.0, sy) * (1.0 - smoothstep(3.0, 10.0, sy));
+      }
+
+      // the résumé billboard: dark backing, mounting brackets, and its glow washing the wall around it
+      vec2 bq = p - uBill.xy;
+      if (uBill.z > 0.0) {
+        float inBill = step(-4.0, bq.x) * step(bq.x, uBill.z + 4.0) * step(-4.0, bq.y) * step(bq.y, uBill.w + 4.0);
+        col = mix(col, vec3(0.02, 0.022, 0.03), inBill);
+        float ox = max(max(-bq.x, bq.x - uBill.z), 0.0);
+        float oy = max(max(-bq.y, bq.y - uBill.w), 0.0);
+        float spill = exp(-length(vec2(ox, oy)) / 40.0) * (1.0 - inBill);
+        col += vec3(1.0, 0.85, 0.6) * spill * 0.12;
+        // brackets below the sign
+        float br = (1.0 - inBill) * step(uBill.w, bq.y) * step(bq.y, uBill.w + 14.0)
+                 * (step(abs(bq.x - uBill.z * 0.2), 2.0) + step(abs(bq.x - uBill.z * 0.8), 2.0));
+        col = mix(col, vec3(0.1, 0.11, 0.13), clamp(br, 0.0, 1.0));
       }
 
       // atmospheric perspective
@@ -367,62 +426,88 @@ const fragmentShader = /* glsl */ `
     if (pj >= 0) outCol = vec4(windowInner(p - PR.xy, PR, PS), 1.0);
 
     // a little rain haze down at street level
-    outCol.rgb = mix(outCol.rgb, HAZE * 1.1, smoothstep(gTop - 160.0, gTop, p.y) * 0.25 * outCol.a);
+    outCol.rgb = mix(outCol.rgb, HAZE * 1.1, smoothstep(gTop - 160.0, gTop, p.y) * 0.18 * outCol.a);
 
-    // the wet sidewalk and curb, mirroring the lit windows above
-    if (p.y > gTop) {
+    // the wet sidewalk the buildings stand on, with a soft contact shadow at their feet
+    if (p.y > gTop && p.y <= roadTop) {
       float gy = p.y - gTop;
-      vec3 g = vec3(0.045, 0.052, 0.07) * (0.85 + 0.3 * vnoise(p * vec2(0.08, 0.3)));
-      g = mix(g, vec3(0.17, 0.18, 0.21), 1.0 - smoothstep(1.5, 3.0, gy)); // lit curb edge
-      g *= 1.0 - 0.35 * smoothstep(${(GROUND_H - 10).toFixed(1)}, ${GROUND_H.toFixed(1)}, gy); // curb face
+      vec3 g = vec3(0.05, 0.057, 0.075) * (0.85 + 0.3 * vnoise(p * vec2(0.08, 0.3)));
+      g *= 1.0 - 0.15 * step(0.5, fract(p.x / 48.0 + 0.5)) * (1.0 - step(1.0, abs(fract(p.x / 48.0) - 0.5) * 48.0)); // slab joints
+      g *= 1.0 - 0.45 * exp(-gy / 7.0);                                                                 // contact shadow
       float c = floor(p.x / 22.0);
       float h = hash(vec2(c, 9.0));
       float wob = vnoise(vec2(p.x * 0.15, gy * 0.4 - uTime * 2.0));
-      g += AMBER * step(0.72, h) * 0.16 * (1.0 - gy / ${GROUND_H.toFixed(1)}) * (0.5 + 0.5 * wob);
-      g += vec3(0.25, 0.4, 0.9) * step(0.95, h) * 0.12 * (1.0 - gy / ${GROUND_H.toFixed(1)}) * (0.5 + 0.5 * wob);
+      g += AMBER * step(0.72, h) * 0.14 * (gy / ${GROUND_H.toFixed(1)}) * (0.5 + 0.5 * wob);
+      // curb: lit top edge and a darker face down to the road
+      float cy = gy - (${GROUND_H.toFixed(1)} - 12.0);
+      g = mix(g, vec3(0.19, 0.2, 0.23), (1.0 - smoothstep(1.0, 2.5, abs(cy))) * step(-2.0, cy));
+      g = mix(g, vec3(0.06, 0.065, 0.08), step(2.5, cy));
       outCol = vec4(g, 1.0);
     }
 
-    // raindrops hitting the sidewalk: a bright impact, a crown of droplets, and a ripple ring
+    // the wet road: deep puddles mirroring the lit windows above, a worn lane line
+    if (p.y > roadTop) {
+      float ry = p.y - roadTop;
+      float rH = uSize.y - roadTop;
+      vec3 r = vec3(0.025, 0.03, 0.042) * (0.85 + 0.3 * vnoise(p * vec2(0.05, 0.2)));
+      float puddle = smoothstep(0.5, 0.62, fbm(p * vec2(0.006, 0.03) + 2.0));
+      // reflections of the city lights, stretched downward and wobbling
+      float c = floor(p.x / 26.0);
+      float h = hash(vec2(c, 9.0));
+      vec3 lc = h > 0.9 ? vec3(0.3, 0.45, 0.95) : AMBER;
+      float wob = sin(p.y * 0.09 + uTime * 1.7 + c) * (1.5 + 3.0 * puddle);
+      float streak = smoothstep(0.45, 0.85, fbm(vec2((p.x + wob) * 0.08, ry * 0.02 - uTime * 0.05)));
+      r += lc * step(0.6, h) * streak * (0.08 + 0.22 * puddle) * (1.0 - ry / rH * 0.6);
+      r += vec3(0.04, 0.05, 0.07) * puddle;
+      // lane line, faded and broken
+      float lane = (1.0 - smoothstep(1.2, 2.2, abs(ry - rH * 0.55))) * step(0.45, fract(p.x / 90.0));
+      r = mix(r, vec3(0.45, 0.4, 0.25) * 0.4, lane * (1.0 - puddle * 0.7));
+      // fade into the page below
+      r *= 1.0 - smoothstep(rH - 40.0, rH, ry) * 0.6;
+      outCol = vec4(r, 1.0);
+    }
+
+    // rain hitting the ground: a bright impact, a crown of droplets, and a ripple ring.
+    // Rows run from the sidewalk to the far edge of the road (bigger toward the front).
     if (p.y > gTop - 26.0) {
       vec3 hit = vec3(0.0);
       float ha = 0.0;
-      float depthPx = ${GROUND_H.toFixed(1)} - 10.0;
-      for (int layer = 0; layer < 3; layer++) {
-        float fl = float(layer);
-        float cw = 23.0 + fl * 7.0;                 // impacts per row, spread a little differently per layer
-        float rowY = gTop + 5.0 + depthPx * (fl + 0.5) / 3.0;
-        float baseC = floor((p.x + fl * 11.0) / cw);
+      float rowH = 16.0;
+      float span = uSize.y - 6.0 - (gTop + 4.0);
+      float rows = floor(span / rowH);
+      float row = floor((p.y - gTop - 4.0) / rowH);
+      for (int dr = -1; dr <= 2; dr++) {
+        float rr = row + float(dr);
+        if (rr < 0.0 || rr > rows - 1.0) continue;
+        float near = 0.7 + 0.5 * rr / max(rows - 1.0, 1.0);
+        float cw = 26.0 * near;
+        float baseC = floor((p.x + rr * 13.0) / cw);
         for (int n = -1; n <= 1; n++) {
           float cell = baseC + float(n);
-          vec2 id = vec2(cell, fl * 17.0);
-          float rate = 1.5 + hash(id) * 1.2;          // impacts per second in this cell
-          float tt = uTime * rate + hash(id + 3.0) * 9.0;
+          vec2 id = vec2(cell, rr * 17.0);
+          float tt = uTime * (1.3 + hash(id) * 1.2) + hash(id + 3.0) * 9.0;
           float age = fract(tt);
+          float k = floor(tt);
           // how busy the ground is follows the rain intensity
-          if (hash(id + floor(tt) * 1.37) > 0.25 + 0.6 * uRain) continue;
-          vec2 I = vec2((cell + 0.2 + 0.6 * hash(id + floor(tt) + 5.0)) * cw - fl * 11.0,
-                        rowY + (hash(id + floor(tt) + 7.0) - 0.5) * depthPx / 3.0);
-          float near = 0.65 + 0.35 * (I.y - gTop) / ${GROUND_H.toFixed(1)}; // nearer rows are a bit bigger
+          if (hash(id + k * 1.37) > 0.25 + 0.6 * uRain) continue;
+          vec2 I = vec2((cell + 0.2 + 0.6 * hash(id + k + 5.0)) * cw - rr * 13.0,
+                        gTop + 4.0 + (rr + 0.2 + 0.6 * hash(id + k + 7.0)) * rowH);
           vec2 d = p - I;
-          // impact flash
-          float fl0 = exp(-length(d) / 1.6) * max(0.0, 1.0 - age * 5.0);
-          // ripple ring on the wet pavement (flattened by perspective)
+          float flash = exp(-length(d) / 1.6) * max(0.0, 1.0 - age * 5.0);
           float ringR = age * 18.0 * near;
-          float ring = exp(-abs(length(d * vec2(1.0, 3.4)) - ringR) * 1.3) * (1.0 - age) * step(gTop, p.y);
-          // crown: droplets thrown up and out, falling back down
+          float ring = exp(-abs(length(d * vec2(1.0, 3.4)) - ringR) * 1.3) * (1.0 - age) * step(I.y - 2.0, p.y + 6.0);
           float crown = 0.0;
-          if (age < 0.55) {
-            float ca = age / 0.55;
-            for (int k = 0; k < 5; k++) {
-              float fk = float(k) - 2.0;
-              float hk = hash(id + vec2(fk, floor(tt)));
-              vec2 dp = I + vec2(fk * (3.0 + 2.0 * hk) * ca * near, -sin(ca * 3.14159) * (5.0 + 9.0 * hk) * near);
+          if (age < 0.5) {
+            float ca = age / 0.5;
+            for (int q = 0; q < 5; q++) {
+              float fq = float(q) - 2.0;
+              float hq = hash(id + vec2(fq, k));
+              vec2 dp = I + vec2(fq * (3.0 + 2.0 * hq) * ca * near, -sin(ca * 3.14159) * (5.0 + 8.0 * hq) * near);
               crown = max(crown, 1.0 - smoothstep(0.7, 1.6, length(p - dp)));
             }
             crown *= 1.0 - ca * 0.6;
           }
-          float a = clamp(fl0 * 1.2 + ring * 0.8 + crown, 0.0, 1.0);
+          float a = clamp(flash * 1.2 + ring * 0.7 + crown, 0.0, 1.0);
           hit = max(hit, vec3(0.72, 0.82, 0.98) * a);
           ha = max(ha, a);
         }
@@ -508,6 +593,9 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
     uRain: { value: 0.5 },
     uSize: { value: new THREE.Vector2(1, 1) },
     uSkyTop: { value: 0 },
+    uBase: { value: 0 },
+    uPlinth: { value: 0 },
+    uBill: { value: new THREE.Vector4() },
     uWin: { value: new THREE.Vector2(1, 1) },
     uGap: { value: new THREE.Vector2(1, 1) },
     uPad: { value: new THREE.Vector2(1, 1) },
@@ -601,7 +689,7 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
     gm.visible = visible;
     // the distant skyline rises from just behind the mid-ground row
     s.roofY = rect.top + L.skyTop + (L.height - L.skyTop) * 0.2;
-    // the pool starts under the curb, at the bottom of the city
+    // the far edge of the road, where the rain stops
     s.streetTop = rect.top + window.scrollY + L.height;
     if (!visible) return;
     const k = worldPerPixel(size.height, 0);
@@ -623,6 +711,10 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
       const u = mat.uniforms;
       u.uSize.value.set(L.width, L.height);
       u.uSkyTop.value = L.skyTop;
+      u.uBase.value = L.baseY;
+      u.uPlinth.value = L.plinthH;
+      if (L.billboard) u.uBill.value.set(L.billboard.x, L.billboard.y, L.billboard.w, L.billboard.h);
+      else u.uBill.value.set(0, 0, 0, 0);
       u.uWin.value.set(L.win.w, L.win.h);
       u.uGap.value.set(L.gap.x, L.gap.y);
       u.uPad.value.set(L.pad.x, L.pad.top);

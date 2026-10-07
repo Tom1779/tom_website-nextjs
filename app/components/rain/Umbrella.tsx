@@ -200,7 +200,7 @@ export default function Umbrella({ splashCount }: { splashCount: number }) {
     umbrellaState.radiusPx = radiusPx;
 
     // Over a pane that's already dry (clickable), the umbrella folds away and the hand cursor shows
-    const active = ptr.planted || (ptr.inside && ptr.seen && ptr.overLink < 0);
+    const active = ptr.planted || (ptr.inside && ptr.seen && ptr.overLink === -1);
     const tx = ptr.x;
     const ty = ptr.planted ? ptr.docY - window.scrollY : ptr.y;
 

@@ -92,6 +92,32 @@ export default function Home() {
             </div>
           )}
           renderAboutDetails={(onResume) => <AboutDetails onResume={onResume} />}
+          resumeUrl="TomArad-Resume.pdf"
+          resumeInline={
+            <>
+              {/* Lazy load PDF with suspense boundary */}
+              <Suspense
+                fallback={
+                  <div className="w-full max-w-[800px] h-64 bg-gray-800 rounded-lg animate-pulse flex items-center justify-center">
+                    <span className="text-gray-400">Loading PDF viewer...</span>
+                  </div>
+                }
+              >
+                <div className="w-full max-w-[800px] mx-auto px-4 scroll-mt-24">
+                  <PDFViewer fileUrl="TomArad-Resume.pdf" showToolbar={false} />
+                </div>
+              </Suspense>
+
+              {/* Open in New Tab Button */}
+              <button
+                onClick={() => window.open("/viewer?file=TomArad-Resume.pdf", "_blank")}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors duration-200"
+                aria-label="Open PDF in fullscreen"
+              >
+                Open PDF in Fullscreen
+              </button>
+            </>
+          }
           aboutTitle={<BlurText text="About Me" delay={150} animateBy="words" direction="top" className="text-4xl" />}
           about={
             <ProfileCard
@@ -110,28 +136,6 @@ export default function Home() {
             />
           }
         />
-
-        {/* Lazy load PDF with suspense boundary */}
-        <Suspense
-          fallback={
-            <div className="w-full max-w-[800px] h-64 bg-gray-800 rounded-lg animate-pulse flex items-center justify-center">
-              <span className="text-gray-400">Loading PDF viewer...</span>
-            </div>
-          }
-        >
-          <div id="resume" className="w-full max-w-[800px] mx-auto px-4 scroll-mt-24">
-            <PDFViewer fileUrl="TomArad-Resume.pdf" showToolbar={false} />
-          </div>
-        </Suspense>
-
-        {/* Open in New Tab Button */}
-        <button
-          onClick={() => window.open("/viewer?file=TomArad-Resume.pdf", "_blank")}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors duration-200"
-          aria-label="Open PDF in fullscreen"
-        >
-          Open PDF in Fullscreen
-        </button>
       </main>
     </>
   );

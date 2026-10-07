@@ -6,7 +6,9 @@ import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUpRight, CloudLightning, CloudRain, LayoutGrid, RotateCcw } from "lucide-react";
 import { rainStore } from "./store";
-import { cityHeight, computeCityLayout, POOL_H, type CityLayout } from "./layout";
+import { computeCityLayout, type CityLayout } from "./layout";
+import ResumeBillboard from "./ResumeBillboard";
+import ResumeDialog from "./ResumeDialog";
 
 const RainScene = dynamic(() => import("./RainScene"), { ssr: false });
 
@@ -42,7 +44,7 @@ function refreshOverLink() {
     ptr.overLink = -1;
     return;
   }
-  const link = document.elementFromPoint(ptr.x, ptr.y)?.closest("a[data-revealed]");
+  const link = document.elementFromPoint(ptr.x, ptr.y)?.closest("[data-revealed]");
   ptr.overLink = link ? Number(link.getAttribute("data-index")) : -1;
 }
 
@@ -62,11 +64,22 @@ interface RainProjectsProps {
   /** The profile card: projected by the bat-signal in the rain view, shown under a title in list view. */
   about?: ReactNode;
   aboutTitle?: ReactNode;
-  /** Bio / skills / links shown beside the card in the pop-up; onResume closes it and jumps to the résumé. */
+  /** Bio / skills / links shown beside the card in the pop-up; onResume closes it and opens the résumé. */
   renderAboutDetails?: (onResume: () => void) => ReactNode;
+  /** The résumé PDF: a billboard in the city (rain view) or `resumeInline` under the about card (list view). */
+  resumeUrl?: string;
+  resumeInline?: ReactNode;
 }
 
-export default function RainProjects({ items, renderList, about, aboutTitle, renderAboutDetails }: RainProjectsProps) {
+export default function RainProjects({
+  items,
+  renderList,
+  about,
+  aboutTitle,
+  renderAboutDetails,
+  resumeUrl,
+  resumeInline,
+}: RainProjectsProps) {
   const [mode, setMode] = useState<ViewMode>("rain");
   const [ready, setReady] = useState(false);
   const [revealed, setRevealed] = useState<boolean[]>(() => items.map(() => false));
@@ -76,6 +89,8 @@ export default function RainProjects({ items, renderList, about, aboutTitle, ren
   const cardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // the profile card pop-up opened from the signal
   const [profileOpen, setProfileOpen] = useState(false);
+  const [resumeOpen, setResumeOpen] = useState(false);
+  const closeResume = useCallback(() => setResumeOpen(false), []);
   const closeProfileRef = useRef<HTMLButtonElement>(null);
   const cityRef = useRef<HTMLDivElement>(null);
   const signalCardRef = useRef<HTMLButtonElement>(null);
@@ -115,11 +130,12 @@ export default function RainProjects({ items, renderList, about, aboutTitle, ren
     const update = () => {
       // the header floats in the sky; buildings start just under it
       const skyTop = (headerRef.current?.offsetHeight ?? 0) + 12;
-      const h = cityHeight(window.innerWidth, window.innerHeight, skyTop);
-      const key = `${el.clientWidth}x${h}x${skyTop}`;
+      // at least the first screen under the navbar; taller when the storeys need it
+      const minH = window.innerHeight - 64;
+      const key = `${el.clientWidth}x${minH}x${skyTop}`;
       if (key === lastKey) return;
       lastKey = key;
-      const next = computeCityLayout(el.clientWidth, h, items.length, skyTop);
+      const next = computeCityLayout(el.clientWidth, items.length, skyTop, minH);
       rainStore.layout = next;
       setLayout(next);
     };
@@ -180,22 +196,7 @@ export default function RainProjects({ items, renderList, about, aboutTitle, ren
       rainStore.intensity = 0.4 + 0.3 * progress; // heavier as you scroll, but keep the content readable
     };
 
-    // ripples follow the cursor through the street puddles below the city
-    let lastRipple = { x: 0, y: 0, t: 0 };
-    const addRipple = (x: number, docY: number) => {
-      const now = performance.now() / 1000;
-      if (!(docY > rainStore.streetTop)) return;
-      if (now - lastRipple.t < 0.09 && Math.hypot(x - lastRipple.x, docY - lastRipple.y) < 40) return;
-      lastRipple = { x, y: docY, t: now };
-      const r = rainStore.ripples[rainStore.rippleNext];
-      r.x = x;
-      r.y = docY;
-      r.t = now;
-      rainStore.rippleNext = (rainStore.rippleNext + 1) % rainStore.ripples.length;
-    };
-
     const onMove = (e: PointerEvent) => {
-      addRipple(e.clientX, e.clientY + window.scrollY);
       if (e.pointerType === "touch") return;
       ptr.planted = false;
       ptr.x = e.clientX;
@@ -207,7 +208,6 @@ export default function RainProjects({ items, renderList, about, aboutTitle, ren
 
     const onDown = (e: PointerEvent) => {
       lastPointerType.current = e.pointerType;
-      addRipple(e.clientX, e.clientY + window.scrollY);
       if (e.pointerType !== "touch") return;
       const el = cityRef.current;
       if (!el || !el.contains(e.target as Node)) return;
@@ -517,22 +517,24 @@ export default function RainProjects({ items, renderList, about, aboutTitle, ren
               </ul>
             )}
             {renderCard()}
+            {layout?.billboard && resumeUrl && (
+              <ResumeBillboard rect={layout.billboard} url={resumeUrl} onOpen={() => setResumeOpen(true)} />
+            )}
           </div>
         ) : (
           <div className="w-full flex flex-col items-center px-4 pb-8">{renderList()}</div>
         )}
       </section>
 
-      {about &&
-        (showRain ? (
-          // the pool and waterfalls start under the city; what follows begins below the pool, in the grotto
-          <div aria-hidden="true" style={{ height: POOL_H }} />
-        ) : (
-          <div className="w-full flex flex-col items-center gap-14 pt-14">
-            {aboutTitle}
-            {about}
-          </div>
-        ))}
+      {/* list view: the classic about card and inline résumé below the projects */}
+      {!showRain && (
+        <div className="w-full flex flex-col items-center gap-14 pt-14">
+          {aboutTitle}
+          {about}
+          {resumeInline}
+        </div>
+      )}
+      {resumeOpen && resumeUrl && <ResumeDialog url={resumeUrl} onClose={closeResume} />}
       {/* portalled to <body>: <main> is its own stacking context, which would leave the navbar on top */}
       {profileOpen &&
         about &&
@@ -559,10 +561,7 @@ export default function RainProjects({ items, renderList, about, aboutTitle, ren
                 <div className="min-w-0 flex-1">
                   {renderAboutDetails(() => {
                     setProfileOpen(false);
-                    // after the pop-up closes (and focus returns to the signal), glide down to the résumé;
-                    // the PDF viewer below is lazy and grows the page as it loads, so re-aim until it settles
-                    const aim = () => document.getElementById("resume")?.scrollIntoView({ behavior: "smooth" });
-                    [60, 700, 1400].forEach((ms) => setTimeout(aim, ms));
+                    setResumeOpen(true);
                   })}
                 </div>
               )}

@@ -3,7 +3,6 @@
 import type { CityLayout } from "./layout";
 
 export const MAX_PROJECTS = 16;
-export const MAX_RIPPLES = 8;
 
 export const rainStore = {
   pointer: {
@@ -41,11 +40,8 @@ export const rainStore = {
   intensity: 0.5,
   // client-px y where the distant skyline should sit (NaN when not laid out yet)
   roofY: NaN,
-  // document-px y where the wet street begins, under the buildings (NaN when not laid out yet)
+  // document-px y of the far edge of the road at the bottom of the city (NaN when not laid out yet)
   streetTop: NaN,
-  // cursor ripples in the street puddles: document px + start time (performance.now() seconds)
-  ripples: Array.from({ length: MAX_RIPPLES }, () => ({ x: 0, y: 0, t: -100 })),
-  rippleNext: 0,
 };
 
 export type RainStore = typeof rainStore;
