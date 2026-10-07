@@ -138,7 +138,7 @@ export default function Rain({ count }: { count: number }) {
     u.uUmbTilt.value = umbrellaState.tilt;
     u.uFlash.value = rainStore.flash;
     // the sidewalk under the buildings, in world y on the z = 0 plane
-    const stopPx = rainStore.streetTop - 12 - window.scrollY;
+    const stopPx = rainStore.streetTop - 3 - window.scrollY;
     u.uStopY.value = Number.isFinite(stopPx) ? -(stopPx - size.height / 2) * k : -1e5;
   });
 

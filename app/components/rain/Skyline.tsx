@@ -465,9 +465,6 @@ const fragmentShader = /* glsl */ `
       float bank = 1.0 - smoothstep(12.0 + lap, 15.0 + lap, ry);
       r = mix(r, vec3(0.06, 0.065, 0.08) * (0.8 + 0.4 * vnoise(p * 0.15)), bank);
       r += vec3(0.78, 0.88, 1.0) * 0.12 * exp(-abs(ry - 14.0 - lap) / 2.0);
-      // the pool's far stone lip, where the page ends
-      float lip = smoothstep(rH - 12.0, rH - 9.0, ry);
-      r = mix(r, vec3(0.08, 0.085, 0.1) * (1.0 + 0.8 * (1.0 - smoothstep(rH - 10.0, rH - 7.0, ry))), lip);
       outCol = vec4(r, 1.0);
     }
 
@@ -477,7 +474,7 @@ const fragmentShader = /* glsl */ `
       vec3 hit = vec3(0.0);
       float ha = 0.0;
       float rowH = 16.0;
-      float span = uSize.y - 6.0 - (gTop + 4.0);
+      float span = uSize.y - 2.0 - (gTop + 4.0);
       float rows = floor(span / rowH);
       float row = floor((p.y - gTop - 4.0) / rowH);
       for (int dr = -1; dr <= 2; dr++) {
