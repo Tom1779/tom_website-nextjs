@@ -29,7 +29,8 @@ const fragmentShader = /* glsl */ `
   uniform vec2 uSize;
   uniform float uSkyTop;
   uniform float uBase;      // top of the sidewalk: every building stands here
-  uniform float uPlinth;    // ground-floor (lobby) height
+  uniform float uPlinth;
+  uniform float uMinW;      // narrowest foreground building, so the shared ground floor fits all of them    // ground-floor (lobby) height
   uniform vec4 uBill;       // résumé billboard rect (x, y, w, h)
   uniform vec2 uWin;
   uniform vec2 uGap;
@@ -265,33 +266,36 @@ const fragmentShader = /* glsl */ `
   }
 
   // The ground floor every building stands on: stone base, a lit lobby door under a canopy, shop windows
-  vec3 groundFloor(vec2 p, vec4 B, float top, float seed) {
+  vec3 groundFloor(vec2 p, vec4 B, float top) {
+    // identical on every building: same stone, a centred lobby door under a canopy, and a matching
+    // pair of lit shop windows either side (no per-building colour, randomness or haze)
     float gy = p.y - top;               // 0 at the top of the ground floor
     float H = uBase - top;
-    float lx = p.x - B.x;
-    vec3 col = mix(vec3(0.075, 0.08, 0.1), vec3(0.1, 0.105, 0.125), seed) * (0.85 + 0.25 * vnoise(p * 0.08));
+    float dx = p.x - (B.x + B.z * 0.5); // from the centre of the building
+    float ax = abs(dx);
+    vec3 col = vec3(0.085, 0.09, 0.11) * (0.9 + 0.2 * vnoise(p * 0.08));
     // cornice band separating it from the storeys above
     col = mix(col, vec3(0.16, 0.17, 0.2), 1.0 - smoothstep(4.0, 6.0, gy));
-    // lobby door in the middle of the building, warm light inside
     float doorW = uWin.x * 0.95;
-    float dx = lx - B.z * 0.5;
     float doorTop = H * 0.28;
-    float inDoor = step(abs(dx), doorW * 0.5) * step(doorTop, gy);
+    // lobby door, warm light inside
+    float inDoor = step(ax, doorW * 0.5) * step(doorTop, gy);
     vec3 lobby = vec3(1.0, 0.78, 0.48) * (0.55 + 0.35 * (gy - doorTop) / (H - doorTop));
-    lobby = mix(lobby, vec3(0.05, 0.05, 0.06), 1.0 - step(1.6, abs(dx)));           // door split
-    lobby = mix(lobby, vec3(0.05, 0.05, 0.06), 1.0 - step(2.0, doorW * 0.5 - abs(dx))); // frame
+    lobby = mix(lobby, vec3(0.05, 0.05, 0.06), 1.0 - step(1.6, ax));                 // door split
+    lobby = mix(lobby, vec3(0.05, 0.05, 0.06), 1.0 - step(2.0, doorW * 0.5 - ax));   // frame
     col = mix(col, lobby, inDoor);
     // canopy over the door, lit from beneath
-    float canopy = step(abs(dx), doorW * 0.85) * step(doorTop - 9.0, gy) * step(gy, doorTop - 3.0);
+    float canopy = step(ax, doorW * 0.85) * step(doorTop - 9.0, gy) * step(gy, doorTop - 3.0);
     col = mix(col, vec3(0.04, 0.042, 0.05), canopy);
-    col += vec3(1.0, 0.75, 0.45) * 0.25 * exp(-max(gy - doorTop, 0.0) / 30.0) * step(doorTop, gy) * step(abs(dx), doorW * 1.4) * (1.0 - inDoor);
-    // shop windows either side of the door
-    float sw = (B.z - doorW * 2.4) * 0.5 - uPad.x;
-    float sx = abs(dx) - doorW * 1.2;
-    if (sw > 20.0 && sx > 0.0 && sx < sw && gy > doorTop && gy < H - 8.0) {
-      float lit = step(0.4, hash(vec2(seed, sign(dx))));
-      vec3 shop = lit > 0.5 ? vec3(0.9, 0.7, 0.45) * (0.35 + 0.2 * vnoise(p * 0.05)) : vec3(0.03, 0.035, 0.05);
-      shop = mix(shop, vec3(0.05, 0.05, 0.06), 1.0 - step(1.5, min(sx, sw - sx)));
+    col += vec3(1.0, 0.75, 0.45) * 0.25 * exp(-max(gy - doorTop, 0.0) / 30.0) * step(doorTop, gy) * step(ax, doorW * 1.4) * (1.0 - inDoor);
+    // one fixed-size, lit shop window each side of the door
+    float sgap = uWin.x * 0.35;
+    float sw = min(uWin.x * 1.25, uMinW * 0.5 - doorW * 0.5 - sgap - uPad.x * 0.6);
+    float sx = ax - doorW * 0.5 - sgap;
+    if (sx > 0.0 && sx < sw && gy > doorTop && gy < H - 8.0) {
+      vec3 shop = vec3(0.9, 0.7, 0.45) * (0.42 + 0.18 * (1.0 - (gy - doorTop) / (H - doorTop)));
+      shop = mix(shop, vec3(0.05, 0.05, 0.06), 1.0 - step(1.5, min(sx, sw - sx)));             // frame
+      shop = mix(shop, vec3(0.05, 0.05, 0.06), 1.0 - step(1.0, abs(sx - sw * 0.5)));           // mullion
       col = shop;
     }
     // a lit step / foundation at the very bottom where the building meets the sidewalk
@@ -379,7 +383,7 @@ const fragmentShader = /* glsl */ `
       float inGrid = step(0.0, cell.x) * step(cell.x, cols - 1.0) * step(0.0, cell.y)
                    * step(B.y + uPad.y + (cell.y + 1.0) * stepPx.y - uGap.y, plinthTop - 6.0);
       if (p.y >= plinthTop) {
-        col = groundFloor(p, B, plinthTop, seed);
+        col = groundFloor(p, B, plinthTop);
       } else if (inGrid > 0.5 && wp.x < uWin.x && wp.y < uWin.y) {
         col = apartment(wp, cell + seed * 97.0);
       } else if (step(0.0, cell.y) > 0.5 && lp.x > 2.0 && lp.x < B.z - 3.0) {
@@ -391,7 +395,8 @@ const fragmentShader = /* glsl */ `
 
       // the résumé billboard: dark backing, mounting brackets, and its glow washing the wall around it
       vec2 bq = p - uBill.xy;
-      if (uBill.z > 0.0) {
+      bool ground = p.y >= uBase - uPlinth;
+      if (uBill.z > 0.0 && !ground) {
         float inBill = step(-4.0, bq.x) * step(bq.x, uBill.z + 4.0) * step(-4.0, bq.y) * step(bq.y, uBill.w + 4.0);
         col = mix(col, vec3(0.02, 0.022, 0.03), inBill);
         float ox = max(max(-bq.x, bq.x - uBill.z), 0.0);
@@ -404,8 +409,8 @@ const fragmentShader = /* glsl */ `
         col = mix(col, vec3(0.1, 0.11, 0.13), clamp(br, 0.0, 1.0));
       }
 
-      // atmospheric perspective
-      col = mix(col, HAZE, B.w * 0.4);
+      // atmospheric perspective (the shared ground floor stays identical on every building)
+      if (!ground) col = mix(col, HAZE, B.w * 0.4);
       col += vec3(0.3, 0.33, 0.45) * uFlash * (0.5 - B.w * 0.2);
       outCol = vec4(col, 1.0);
     } else {
@@ -596,6 +601,7 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
     uSkyTop: { value: 0 },
     uBase: { value: 0 },
     uPlinth: { value: 0 },
+    uMinW: { value: 0 },
     uBill: { value: new THREE.Vector4() },
     uWin: { value: new THREE.Vector2(1, 1) },
     uGap: { value: new THREE.Vector2(1, 1) },
@@ -714,6 +720,7 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
       u.uSkyTop.value = L.skyTop;
       u.uBase.value = L.baseY;
       u.uPlinth.value = L.plinthH;
+      u.uMinW.value = Math.min(...L.buildings.map((b) => b.w));
       if (L.billboard) u.uBill.value.set(L.billboard.x, L.billboard.y, L.billboard.w, L.billboard.h);
       else u.uBill.value.set(0, 0, 0, 0);
       u.uWin.value.set(L.win.w, L.win.h);
