@@ -106,15 +106,17 @@ const fragmentShader = /* glsl */ `
       col += lc * streak * step(0.45, h) * 0.35 * (1.0 - depth / poolH);
       col += FOAM * smoothstep(0.62, 0.8, vnoise(vec2(q.x * 0.03, p.y * 0.25))) * 0.05;
 
-      // rain landing along the pool's far edge, where the streaks stop: rings, splash columns, spray
-      float rowH = 12.0;
-      float bandTop = poolH - 34.0;
+      // rain hitting the whole pool (busiest along the far edge, where the streaks end):
+      // rings spreading on the surface, splash columns and spray
+      float rowH = 20.0;
+      float bandTop = 0.0;
+      float rows = floor(poolH / rowH);
       float row = floor((depth - bandTop) / rowH);
       for (int dr = -1; dr <= 1; dr++) {
         float r = row + float(dr);
-        if (r < 0.0 || r > 1.0) continue;
-        float persp = 1.0;
-        float cw = 20.0;
+        if (r < 0.0 || r > rows - 1.0) continue;
+        float persp = 0.7 + 0.3 * r / max(rows - 1.0, 1.0); // nearer (lower) rows look bigger
+        float cw = mix(36.0, 20.0, step(rows - 2.0, r)) * persp;
         float baseC = floor((p.x + r * 13.0) / cw);
         for (int n = -1; n <= 1; n++) {
           float cell = baseC + float(n);
