@@ -106,14 +106,15 @@ const fragmentShader = /* glsl */ `
       col += lc * streak * step(0.45, h) * 0.35 * (1.0 - depth / poolH);
       col += FOAM * smoothstep(0.62, 0.8, vnoise(vec2(q.x * 0.03, p.y * 0.25))) * 0.05;
 
-      // rain landing in the pool: rings spreading on the surface, a little splash column and droplets
-      float rowH = 26.0;
-      float row = floor(depth / rowH);
+      // rain landing along the pool's far edge, where the streaks stop: rings, splash columns, spray
+      float rowH = 12.0;
+      float bandTop = poolH - 34.0;
+      float row = floor((depth - bandTop) / rowH);
       for (int dr = -1; dr <= 1; dr++) {
         float r = row + float(dr);
-        if (r < 0.0) continue;
-        float persp = 0.6 + 0.4 * clamp((r * rowH) / poolH, 0.0, 1.0); // nearer (lower) rows look bigger
-        float cw = 34.0 * persp;
+        if (r < 0.0 || r > 1.0) continue;
+        float persp = 1.0;
+        float cw = 20.0;
         float baseC = floor((p.x + r * 13.0) / cw);
         for (int n = -1; n <= 1; n++) {
           float cell = baseC + float(n);
@@ -123,7 +124,7 @@ const fragmentShader = /* glsl */ `
           float k = floor(tt);
           if (hash(id + k * 1.37) > 0.3 + 0.6 * uRain) continue;
           vec2 I = vec2((cell + 0.15 + 0.7 * hash(id + k + 5.0)) * cw - r * 13.0,
-                        uTop + (r + 0.2 + 0.6 * hash(id + k + 7.0)) * rowH);
+                        uTop + bandTop + (r + 0.2 + 0.6 * hash(id + k + 7.0)) * rowH);
           vec2 d = p - I;
           // two rings: a fast outer one and a slower inner one
           float rr = age * 22.0 * persp;

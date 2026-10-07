@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { rainStore } from "./store";
 import { CAMERA_Z, worldPerPixel } from "./quality";
 import { umbrellaState } from "./Umbrella";
-import { GROUND_H, POOL_H } from "./layout";
+import { POOL_H } from "./layout";
 
 const vertexShader = /* glsl */ `
   attribute vec4 aSeed;   // x offset, phase, depth, visibility threshold
@@ -21,7 +21,7 @@ const vertexShader = /* glsl */ `
   uniform vec3 uUmb;       // umbrella rim centre (x, y) on z = 0 plane, z = active
   uniform vec2 uUmbShape;  // radius, canopy height
   uniform float uUmbTilt;
-  uniform vec2 uLand;      // z = 0 plane y of the landing zone: sidewalk top (x) to the pool's far edge (y)
+  uniform float uStopY;    // z = 0 plane y where the rain stops (the pool's far edge, above the falls)
 
   varying float vAlpha;
   varying float vT;
@@ -54,11 +54,9 @@ const vertexShader = /* glsl */ `
     float width = uPx * mix(1.4, 2.6, smoothstep(-8.0, 6.0, z));
 
     // the rain lands on the sidewalk under the buildings and stops there (test the streak's lower tip)
-    // each drop lands somewhere between the sidewalk and the far edge of the pool, so streaks end at
-    // different depths across the water like rain falling onto a surface seen at an angle
+    // the rain falls over the pool and stops at its far edge, above the falls (test the streak's lower tip)
     float tipY = (y + dir.y * len * 0.5) / depthScale;
-    float landY = mix(uLand.x, uLand.y, fract(aSeed.x * 91.7 + aSeed.w * 13.3 + aSeed.z * 0.37));
-    visible *= step(landY, tipY);
+    visible *= step(uStopY, tipY);
 
     vec2 pos = vec2(x, y) + perp * position.x * width + dir * position.y * len;
     pos *= visible;
@@ -119,7 +117,7 @@ export default function Rain({ count }: { count: number }) {
       uUmb: { value: new THREE.Vector3(0, 0, 0) },
       uUmbShape: { value: new THREE.Vector2(1, 0.4) },
       uUmbTilt: { value: 0 },
-      uLand: { value: new THREE.Vector2(-1e5, -1e5) },
+      uStopY: { value: -1e5 },
       uFlash: { value: 0 },
     }),
     [],
@@ -141,10 +139,8 @@ export default function Rain({ count }: { count: number }) {
     u.uUmbTilt.value = umbrellaState.tilt;
     u.uFlash.value = rainStore.flash;
     // the sidewalk under the buildings, in world y on the z = 0 plane
-    const toWorldY = (px: number) => -(px - size.height / 2) * k;
-    const st = rainStore.streetTop - window.scrollY;
-    if (Number.isFinite(st)) u.uLand.value.set(toWorldY(st - GROUND_H * 0.85), toWorldY(st + POOL_H - 14));
-    else u.uLand.value.set(-1e5, -1e5);
+    const stopPx = rainStore.streetTop + POOL_H - 10 - window.scrollY;
+    u.uStopY.value = Number.isFinite(stopPx) ? -(stopPx - size.height / 2) * k : -1e5;
   });
 
   return (
