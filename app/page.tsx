@@ -76,7 +76,7 @@ export default function Home() {
 
   return (
     <>
-      <main className="relative z-0 text-white pb-8 flex flex-col items-center justify-center flex-1 gap-14">
+      <main className="relative z-0 text-white flex flex-col items-center justify-center flex-1 gap-14">
         {/* Rain & umbrella hero: projects behind fogged glass (list view fallback inside) */}
         <RainProjects
           items={memoizedItems}

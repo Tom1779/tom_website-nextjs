@@ -528,7 +528,7 @@ export default function RainProjects({
 
       {/* list view: the classic about card and inline résumé below the projects */}
       {!showRain && (
-        <div className="w-full flex flex-col items-center gap-14 pt-14">
+        <div className="w-full flex flex-col items-center gap-14 pt-14 pb-8">
           {aboutTitle}
           {about}
           {resumeInline}

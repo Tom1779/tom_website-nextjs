@@ -74,7 +74,14 @@ interface ResumeBillboardProps {
 /** A lit billboard bolted to the lower storeys of a building, advertising the résumé. Click to read it. */
 export default function ResumeBillboard({ rect, url, onOpen }: ResumeBillboardProps) {
   const thumb = useResumeThumb(url);
-  const wide = rect.w > rect.h * 1.15;
+  // the résumé is always shown whole, at real letter-paper proportions; only the layout around it adapts
+  const PAPER = 8.5 / 11;
+  const innerW = rect.w - 6;
+  const innerH = rect.h - 6;
+  const wide = innerW - innerH * PAPER >= 150; // room for the headline beside the page?
+  const paperH = wide ? innerH : Math.min(innerH - 26, innerW / PAPER);
+  const paperW = paperH * PAPER;
+  const titleSize = innerW > 420 ? "text-3xl lg:text-4xl" : "text-2xl";
 
   return (
     <button
@@ -96,43 +103,51 @@ export default function ResumeBillboard({ rect, url, onOpen }: ResumeBillboardPr
         ))}
       </span>
 
-      <span className="absolute inset-0 flex overflow-hidden rounded-[3px] border-[3px] border-slate-800 bg-[#10141f] shadow-[0_0_40px_rgba(255,200,120,0.18),0_8px_24px_rgba(0,0,0,0.6)] transition-shadow duration-300 group-hover:shadow-[0_0_60px_rgba(255,200,120,0.35),0_8px_24px_rgba(0,0,0,0.6)]">
-        {/* the résumé itself, like a poster pasted on the sign */}
+      <span
+        className={`absolute inset-0 flex ${wide ? "flex-row" : "flex-col items-center"} overflow-hidden rounded-[3px] border-[3px] border-slate-800 bg-[#10141f] shadow-[0_0_40px_rgba(255,200,120,0.18),0_8px_24px_rgba(0,0,0,0.6)] transition-shadow duration-300 group-hover:shadow-[0_0_60px_rgba(255,200,120,0.35),0_8px_24px_rgba(0,0,0,0.6)]`}
+      >
+        {/* narrow sign: a slim title strip above the page */}
+        {!wide && (
+          <span className="flex h-[26px] w-full shrink-0 items-center justify-between px-2 font-sans">
+            <span
+              className="text-[11px] font-bold tracking-[0.2em] text-white"
+              style={{ fontFamily: "Orbitron, sans-serif" }}
+            >
+              RÉSUMÉ
+            </span>
+            <ArrowUpRight className="h-3.5 w-3.5 text-amber-100/90" aria-hidden="true" />
+          </span>
+        )}
+
+        {/* the résumé itself, like a poster pasted on the sign: always the whole first page */}
         <span
-          className={`relative flex shrink-0 items-start justify-center overflow-hidden bg-[#e9e4d8] ${
-            wide ? "h-full w-[42%]" : "absolute inset-0"
-          }`}
+          style={{ width: paperW, height: paperH }}
+          className="relative flex shrink-0 items-center justify-center overflow-hidden bg-[#e9e4d8]"
         >
           {thumb ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={thumb} alt="" className="w-full object-cover object-top" draggable={false} />
+            <img src={thumb} alt="" className="h-full w-full object-contain" draggable={false} />
           ) : (
             <span className="m-auto font-serif text-sm text-slate-500">Résumé</span>
           )}
         </span>
 
-        {/* headline */}
-        <span
-          className={`flex flex-col justify-center gap-1.5 px-4 font-sans ${
-            wide
-              ? "flex-1"
-              : "absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#0b0f18] via-[#0b0f18]/90 to-transparent pb-3 pt-10"
-          }`}
-        >
-          <span className="text-[10px] uppercase tracking-[0.35em] text-amber-200/70">Now showing</span>
-          <span
-            className={`font-bold leading-none text-white drop-shadow-[0_0_12px_rgba(255,220,160,0.45)] ${
-              wide ? "text-3xl lg:text-4xl" : "text-2xl"
-            }`}
-            style={{ fontFamily: "Orbitron, sans-serif" }}
-          >
-            RÉSUMÉ
+        {/* headline beside the page on wide signs */}
+        {wide && (
+          <span className="flex flex-1 flex-col justify-center gap-1.5 px-4 font-sans">
+            <span className="text-[10px] uppercase tracking-[0.35em] text-amber-200/70">Now showing</span>
+            <span
+              className={`font-bold leading-none text-white drop-shadow-[0_0_12px_rgba(255,220,160,0.45)] ${titleSize}`}
+              style={{ fontFamily: "Orbitron, sans-serif" }}
+            >
+              RÉSUMÉ
+            </span>
+            <span className="text-xs text-slate-300">Tom Arad · Software Engineer</span>
+            <span className="mt-1 inline-flex items-center gap-1 text-xs text-amber-100/90 transition-colors group-hover:text-amber-50">
+              Click to read <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </span>
           </span>
-          {wide && <span className="text-xs text-slate-300">Tom Arad · Software Engineer</span>}
-          <span className="mt-1 inline-flex items-center gap-1 text-xs text-amber-100/90 transition-colors group-hover:text-amber-50">
-            Click to read <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
-          </span>
-        </span>
+        )}
 
         {/* lamp light washing down from the top, and a wet sheen */}
         <span
