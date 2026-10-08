@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUpRight, CloudLightning, CloudRain, LayoutGrid, RotateCcw } from "lucide-react";
 import { rainStore } from "./store";
+import { detectGpu } from "./gpu";
 import { computeCityLayout, type CityLayout } from "./layout";
 import ResumeBillboard from "./ResumeBillboard";
 import ResumeDialog from "./ResumeDialog";
@@ -48,15 +49,6 @@ function refreshOverLink() {
   ptr.overLink = link ? Number(link.getAttribute("data-index")) : -1;
 }
 
-function supportsWebGL() {
-  try {
-    const c = document.createElement("canvas");
-    return !!(c.getContext("webgl2") || c.getContext("webgl"));
-  } catch {
-    return false;
-  }
-}
-
 interface RainProjectsProps {
   items: RainProject[];
   /** The plain list view (shown for reduced motion, no WebGL, or when toggled). */
@@ -82,6 +74,9 @@ export default function RainProjects({
 }: RainProjectsProps) {
   const [mode, setMode] = useState<ViewMode>("rain");
   const [ready, setReady] = useState(false);
+  // shown when we fell back to the list because the 3D scene would be (or was) too slow on this device
+  const [slowNotice, setSlowNotice] = useState(false);
+  const forcedRain = useRef(false);
   const [revealed, setRevealed] = useState<boolean[]>(() => items.map(() => false));
   const [layout, setLayout] = useState<CityLayout | null>(null);
   // project whose detail card is showing (hovered / focused / tapped)
@@ -97,22 +92,39 @@ export default function RainProjects({
   const headerRef = useRef<HTMLElement>(null);
   const lastPointerType = useRef<string>("mouse");
 
-  // Pick the initial view: saved choice > reduced motion / no WebGL > rain
+  // Pick the initial view: saved choice > reduced motion / no or software-only WebGL > rain
   useEffect(() => {
     let initial: ViewMode = "rain";
+    let saved: string | null = null;
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved === "rain" || saved === "list") initial = saved;
-      else if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) initial = "list";
+      saved = localStorage.getItem(STORAGE_KEY);
     } catch {
-      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) initial = "list";
+      /* storage unavailable */
     }
-    if (!supportsWebGL()) initial = "list";
+    if (saved === "rain" || saved === "list") initial = saved;
+    else if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) initial = "list";
+    const gpu = detectGpu();
+    if (gpu === "none") {
+      initial = "list";
+    } else if (gpu === "software" && saved !== "rain") {
+      // hardware acceleration is off: the scene would crawl, so start with the list (they can still opt in)
+      initial = "list";
+      setSlowNotice(true);
+    }
     setMode(initial);
     setReady(true);
   }, []);
 
+  // The scene measured itself as too slow: fall back to the list unless they chose the rain themselves
+  const handleSlow = useCallback(() => {
+    if (forcedRain.current) return;
+    setMode("list");
+    setSlowNotice(true);
+  }, []);
+
   const switchMode = (next: ViewMode) => {
+    if (next === "rain") forcedRain.current = true;
+    setSlowNotice(false);
     setMode(next);
     try {
       localStorage.setItem(STORAGE_KEY, next);
@@ -342,7 +354,9 @@ export default function RainProjects({
         style={{ minHeight: showRain ? (layout?.height ?? 640) : undefined }}
         aria-labelledby="projects-heading"
       >
-        {showRain && ready && <RainScene images={items.map((p) => p.image)} onReveal={handleReveal} />}
+        {showRain && ready && (
+          <RainScene images={items.map((p) => p.image)} onReveal={handleReveal} onSlow={handleSlow} />
+        )}
 
         <header
           ref={headerRef}
@@ -424,6 +438,12 @@ export default function RainProjects({
                 )}
               </button>
             </div>
+            {slowNotice && !showRain && (
+              <p role="status" className="max-w-md font-sans text-xs text-slate-400">
+                Showing the simple view because the animated city would run slowly here (hardware acceleration looks to
+                be off). You can still go back to the rain.
+              </p>
+            )}
           </div>
 
           {/* the profile card, projected into the sky by a searchlight on a rooftop below it */}

@@ -10,15 +10,18 @@ import Billboard from "./Billboard";
 import WindowParticles from "./WindowParticles";
 import Umbrella from "./Umbrella";
 import Lightning from "./Lightning";
+import PerfWatch from "./PerfWatch";
 import { CAMERA_FOV, CAMERA_Z, getRainQuality, type RainQuality } from "./quality";
 
 interface RainSceneProps {
   images: string[];
   onReveal: (index: number) => void;
+  /** Called once if the scene renders too slowly on this device. */
+  onSlow?: () => void;
 }
 
 /** Fixed full-screen canvas behind the page. Loaded with next/dynamic + ssr:false. */
-export default function RainScene({ images, onReveal }: RainSceneProps) {
+export default function RainScene({ images, onReveal, onSlow }: RainSceneProps) {
   const [quality] = useState<RainQuality>(() => getRainQuality());
   const [hidden, setHidden] = useState(false);
 
@@ -48,6 +51,7 @@ export default function RainScene({ images, onReveal }: RainSceneProps) {
         <Billboard />
         <Rain count={quality.drops} />
         <Umbrella splashCount={quality.splashes} />
+        {onSlow && <PerfWatch onSlow={onSlow} />}
       </Canvas>
     </div>
   );
