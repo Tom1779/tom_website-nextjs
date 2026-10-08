@@ -159,6 +159,8 @@ export default function ResumeBillboard({ rect, url, onOpen }: ResumeBillboardPr
           className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,transparent_40%,rgba(255,255,255,0.07)_48%,transparent_56%)]"
         />
       </span>
+      {/* rain falling in front of the sign, matching the scene's rain behind it */}
+      <span aria-hidden="true" className="billboard-rain pointer-events-none absolute -inset-x-3 -inset-y-10" />
     </button>
   );
 }

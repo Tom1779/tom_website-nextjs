@@ -188,3 +188,29 @@ body {
 html[data-rain="on"] [data-bg-beams] {
   display: none;
 }
+
+/* Rain falling in front of the résumé billboard (the billboard is DOM over the 3D scene, so the scene's rain is behind it) */
+.billboard-rain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='110' height='180'%3E%3Cline x1='34.4' y1='21.6' x2='38.3' y2='60.6' stroke='rgba(170,192,228,0.32)' stroke-width='1.3' stroke-linecap='round'/%3E%3Cline x1='55.6' y1='49.5' x2='58.3' y2='76.7' stroke='rgba(170,192,228,0.45)' stroke-width='1.3' stroke-linecap='round'/%3E%3Cline x1='5.7' y1='58.4' x2='8.5' y2='85.8' stroke='rgba(170,192,228,0.33)' stroke-width='1.3' stroke-linecap='round'/%3E%3Cline x1='44.5' y1='109.5' x2='47.3' y2='138.0' stroke='rgba(170,192,228,0.37)' stroke-width='1.3' stroke-linecap='round'/%3E%3Cline x1='64.7' y1='125.2' x2='68.5' y2='162.7' stroke='rgba(170,192,228,0.42)' stroke-width='1.3' stroke-linecap='round'/%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='70' height='120'%3E%3Cline x1='60.6' y1='6.2' x2='63.0' y2='30.5' stroke='rgba(170,192,228,0.23)' stroke-width='0.9' stroke-linecap='round'/%3E%3Cline x1='10.7' y1='12.6' x2='12.4' y2='30.3' stroke='rgba(170,192,228,0.32)' stroke-width='0.9' stroke-linecap='round'/%3E%3Cline x1='12.8' y1='54.3' x2='15.0' y2='76.0' stroke='rgba(170,192,228,0.24)' stroke-width='0.9' stroke-linecap='round'/%3E%3Cline x1='34.9' y1='7.7' x2='36.3' y2='22.4' stroke='rgba(170,192,228,0.21)' stroke-width='0.9' stroke-linecap='round'/%3E%3Cline x1='42.8' y1='40.5' x2='44.6' y2='58.3' stroke='rgba(170,192,228,0.28)' stroke-width='0.9' stroke-linecap='round'/%3E%3Cline x1='29.2' y1='29.0' x2='31.5' y2='52.5' stroke='rgba(170,192,228,0.30)' stroke-width='0.9' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-size: 110px 180px, 70px 120px;
+  animation: billboard-rain 0.2s linear infinite;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
+}
+.billboard-rain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: inherit;
+  background-size: 110px 180px, 70px 120px;
+  background-position: 47px 63px, 29px 41px;
+  animation: billboard-rain 0.26s linear infinite;
+  opacity: 0.7;
+}
+@keyframes billboard-rain {
+  from { background-position: 0 0, 0 0; }
+  to { background-position: 18px 180px, 12px 120px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .billboard-rain, .billboard-rain::after { animation: none; }
+}
