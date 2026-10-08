@@ -1,13 +1,8 @@
-import React, {
-  useRef,
-  useEffect,
-  useCallback,
-  useMemo,
-  useState,
-} from "react";
+import React, { useRef, useEffect, useCallback, useMemo, useState } from "react";
 import { gsap } from "gsap";
 import Image from "next/image";
 import Link from "next/link";
+import { useGpu } from "./useGpu";
 
 export interface ChromaItem {
   image: string;
@@ -40,6 +35,7 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
   ease = "power3.out",
 }) => {
   const rootRef = useRef<HTMLDivElement>(null);
+  const lite = useGpu() === "software";
   const fadeRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const setX = useRef<SetterFn | null>(null);
@@ -114,14 +110,9 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
 
     el.style.setProperty(
       "--performance-backdrop",
-      performanceConfig.useBackdropFilter
-        ? "grayscale(1) brightness(0.78)"
-        : "none"
+      performanceConfig.useBackdropFilter ? "grayscale(1) brightness(0.78)" : "none",
     );
-    el.style.setProperty(
-      "--performance-opacity",
-      performanceConfig.reducedOpacity.toString()
-    );
+    el.style.setProperty("--performance-opacity", performanceConfig.reducedOpacity.toString());
   }, [performanceConfig]);
 
   const moveTo = useCallback(
@@ -142,7 +133,7 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
         overwrite: true,
       });
     },
-    [damping, ease]
+    [damping, ease],
   );
 
   const handleMove = useCallback(
@@ -161,7 +152,7 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
         });
       }
     },
-    [moveTo]
+    [moveTo],
   );
 
   const handleLeave = useCallback(() => {
@@ -173,26 +164,24 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
     });
   }, [fadeOut, performanceConfig.reducedOpacity]);
 
-  const handleCardMove: React.MouseEventHandler<HTMLElement> = useCallback(
-    (e) => {
-      const c = e.currentTarget as HTMLElement;
-      const rect = c.getBoundingClientRect();
-      c.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
-      c.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
-    },
-    []
-  );
+  const handleCardMove: React.MouseEventHandler<HTMLElement> = useCallback((e) => {
+    const c = e.currentTarget as HTMLElement;
+    const rect = c.getBoundingClientRect();
+    c.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
+    c.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
+  }, []);
 
   const cardClassName =
     "group relative flex flex-col w-[300px] rounded-[20px] overflow-hidden border-2 border-transparent transition-colors duration-300 cursor-pointer no-underline";
 
-  const cardStyle = (c: ChromaItem): React.CSSProperties => ({
-    "--card-border": c.borderColor || "transparent",
-    background: c.gradient,
-    "--spotlight-color": "rgba(255,255,255,0.3)",
-    contain: "layout style paint",
-    transform: "translateZ(0)",
-  } as React.CSSProperties);
+  const cardStyle = (c: ChromaItem): React.CSSProperties =>
+    ({
+      "--card-border": c.borderColor || "transparent",
+      background: c.gradient,
+      "--spotlight-color": "rgba(255,255,255,0.3)",
+      contain: "layout style paint",
+      transform: "translateZ(0)",
+    }) as React.CSSProperties;
 
   const cardInner = (c: ChromaItem) => (
     <>
@@ -219,22 +208,10 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
         />
       </div>
       <footer className="relative z-10 p-3 text-white font-sans grid grid-rows-[1fr_auto] gap-x-3 gap-y-1">
-        <h3 className="m-0 text-[1.05rem] font-semibold text-center">
-          {c.title}
-        </h3>
-        {c.handle && (
-          <span className="text-[0.95rem] opacity-80 text-center text-amber-300">
-            {c.handle}
-          </span>
-        )}
-        <p className="m-0 text-[0.85rem] opacity-85 text-center">
-          {c.subtitle}
-        </p>
-        {c.location && (
-          <span className="text-[0.85rem] opacity-85 text-right">
-            {c.location}
-          </span>
-        )}
+        <h3 className="m-0 text-[1.05rem] font-semibold text-center">{c.title}</h3>
+        {c.handle && <span className="text-[0.95rem] opacity-80 text-center text-amber-300">{c.handle}</span>}
+        <p className="m-0 text-[0.85rem] opacity-85 text-center">{c.subtitle}</p>
+        {c.location && <span className="text-[0.85rem] opacity-85 text-right">{c.location}</span>}
       </footer>
     </>
   );
@@ -257,13 +234,7 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
     >
       {data?.map((c, i) =>
         c.url?.startsWith("/") ? (
-          <Link
-            key={i}
-            href={c.url}
-            onMouseMove={handleCardMove}
-            className={cardClassName}
-            style={cardStyle(c)}
-          >
+          <Link key={i} href={c.url} onMouseMove={handleCardMove} className={cardClassName} style={cardStyle(c)}>
             {cardInner(c)}
           </Link>
         ) : (
@@ -278,53 +249,47 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
           >
             {cardInner(c)}
           </a>
-        )
+        ),
       )}
 
-      {/* Base overlay */}
-      <div
-        ref={overlayRef}
-        className="absolute inset-0 w-full h-full pointer-events-none z-30"
-        style={{
-          backdropFilter: performanceConfig.useBackdropFilter
-            ? "grayscale(1) brightness(0.78)"
-            : "none",
-          WebkitBackdropFilter: performanceConfig.useBackdropFilter
-            ? "grayscale(1) brightness(0.78)"
-            : "none",
-          background: performanceConfig.useBackdropFilter
-            ? "rgba(0,0,0,0.001)"
-            : "rgba(0,0,0,0.2)",
-          maskImage: gradientMasks.baseGradient,
-          WebkitMaskImage: gradientMasks.baseGradient,
-          contain: "layout style paint",
-          willChange: "transform, opacity",
-          transform: "translateZ(0)",
-        }}
-      />
+      {/* Spotlight overlays: they re-mask the whole grid on every mouse move, which crawls without
+          hardware acceleration, so they're skipped there (each card keeps its own hover glow) */}
+      {!lite && (
+        <>
+          {/* Base overlay */}
+          <div
+            ref={overlayRef}
+            className="absolute inset-0 w-full h-full pointer-events-none z-30"
+            style={{
+              backdropFilter: performanceConfig.useBackdropFilter ? "grayscale(1) brightness(0.78)" : "none",
+              WebkitBackdropFilter: performanceConfig.useBackdropFilter ? "grayscale(1) brightness(0.78)" : "none",
+              background: performanceConfig.useBackdropFilter ? "rgba(0,0,0,0.001)" : "rgba(0,0,0,0.2)",
+              maskImage: gradientMasks.baseGradient,
+              WebkitMaskImage: gradientMasks.baseGradient,
+              contain: "layout style paint",
+              willChange: "transform, opacity",
+              transform: "translateZ(0)",
+            }}
+          />
 
-      {/* Fade overlay */}
-      <div
-        ref={fadeRef}
-        className="absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-[250ms] z-40"
-        style={{
-          backdropFilter: performanceConfig.useBackdropFilter
-            ? "grayscale(1) brightness(0.78)"
-            : "none",
-          WebkitBackdropFilter: performanceConfig.useBackdropFilter
-            ? "grayscale(1) brightness(0.78)"
-            : "none",
-          background: performanceConfig.useBackdropFilter
-            ? "rgba(0,0,0,0.001)"
-            : "rgba(0,0,0,0.15)",
-          maskImage: gradientMasks.fadeGradient,
-          WebkitMaskImage: gradientMasks.fadeGradient,
-          opacity: performanceConfig.reducedOpacity,
-          contain: "layout style paint",
-          willChange: "opacity",
-          transform: "translateZ(0)",
-        }}
-      />
+          {/* Fade overlay */}
+          <div
+            ref={fadeRef}
+            className="absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-[250ms] z-40"
+            style={{
+              backdropFilter: performanceConfig.useBackdropFilter ? "grayscale(1) brightness(0.78)" : "none",
+              WebkitBackdropFilter: performanceConfig.useBackdropFilter ? "grayscale(1) brightness(0.78)" : "none",
+              background: performanceConfig.useBackdropFilter ? "rgba(0,0,0,0.001)" : "rgba(0,0,0,0.15)",
+              maskImage: gradientMasks.fadeGradient,
+              WebkitMaskImage: gradientMasks.fadeGradient,
+              opacity: performanceConfig.reducedOpacity,
+              contain: "layout style paint",
+              willChange: "opacity",
+              transform: "translateZ(0)",
+            }}
+          />
+        </>
+      )}
     </div>
   );
 };

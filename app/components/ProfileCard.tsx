@@ -13,6 +13,8 @@ interface ProfileCardProps {
   showBehindGradient?: boolean;
   className?: string;
   enableTilt?: boolean;
+  /** Skip the blurred glow, holographic shine and tilt (for devices without hardware acceleration). */
+  lite?: boolean;
   enableMobileTilt?: boolean;
   mobileTiltSensitivity?: number;
   miniAvatarUrl?: string;
@@ -50,8 +52,7 @@ const DEFAULT_PROPS = {
 const DEFAULT_BEHIND_GRADIENT =
   "radial-gradient(farthest-side circle at var(--pointer-x) var(--pointer-y),hsla(266,100%,90%,var(--card-opacity)) 4%,hsla(266,50%,80%,calc(var(--card-opacity)*0.75)) 10%,hsla(266,25%,70%,calc(var(--card-opacity)*0.5)) 50%,hsla(266,0%,60%,0) 100%),radial-gradient(35% 52% at 55% 20%,#00ffaac4 0%,#073aff00 100%),radial-gradient(100% 100% at 50% 50%,#00c1ffff 1%,#073aff00 76%),conic-gradient(from 124deg at 50% 50%,#c137ffff 0%,#07c6ffff 40%,#07c6ffff 60%,#c137ffff 100%)";
 
-const DEFAULT_INNER_GRADIENT =
-  "linear-gradient(145deg,#60496e8c 0%,#71C4FF44 100%)";
+const DEFAULT_INNER_GRADIENT = "linear-gradient(145deg,#60496e8c 0%,#71C4FF44 100%)";
 
 const ANIMATION_CONFIG = {
   SMOOTH_DURATION: 600,
@@ -62,27 +63,18 @@ const ANIMATION_CONFIG = {
   THROTTLE_MS: 16,
 } as const;
 
-const clamp = (value: number, min = 0, max = 100): number =>
-  Math.min(Math.max(value, min), max);
+const clamp = (value: number, min = 0, max = 100): number => Math.min(Math.max(value, min), max);
 
-const round = (value: number, precision = 3): number =>
-  parseFloat(value.toFixed(precision));
+const round = (value: number, precision = 3): number => parseFloat(value.toFixed(precision));
 
-const adjust = (
-  value: number,
-  fromMin: number,
-  fromMax: number,
-  toMin: number,
-  toMax: number
-): number =>
+const adjust = (value: number, fromMin: number, fromMax: number, toMin: number, toMax: number): number =>
   round(toMin + ((toMax - toMin) * (value - fromMin)) / (fromMax - fromMin));
 
-const easeInOutCubic = (x: number): number =>
-  x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const easeInOutCubic = (x: number): number => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
 
 const useThrottledCallback = <Args extends unknown[], R>(
   callback: (...args: Args) => R,
-  delay: number
+  delay: number,
 ): ((...args: Args) => R | undefined) => {
   const lastCall = useRef(0);
   return useCallback(
@@ -94,7 +86,7 @@ const useThrottledCallback = <Args extends unknown[], R>(
       }
       return undefined;
     },
-    [callback, delay]
+    [callback, delay],
   );
 };
 
@@ -131,6 +123,7 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
     showBehindGradient,
     className,
     enableTilt,
+    lite,
     enableMobileTilt,
     mobileTiltSensitivity,
     miniAvatarUrl,
@@ -155,16 +148,11 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
     triggerOnce: false,
   });
 
-  const shouldEnableTilt = enableTilt && inView;
+  const shouldEnableTilt = enableTilt && inView && !lite;
 
   const animationHandlers = useMemo(() => {
     if (!shouldEnableTilt) return null;
-    const updateCardTransform = (
-      offsetX: number,
-      offsetY: number,
-      card: HTMLElement,
-      wrap: HTMLElement
-    ) => {
+    const updateCardTransform = (offsetX: number, offsetY: number, card: HTMLElement, wrap: HTMLElement) => {
       const width = card.clientWidth;
       const height = card.clientHeight;
       const percentX = clamp((100 / width) * offsetX);
@@ -176,11 +164,7 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
         --pointer-y: ${percentY}%;
         --background-x: ${adjust(percentX, 0, 100, 35, 65)}%;
         --background-y: ${adjust(percentY, 0, 100, 35, 65)}%;
-        --pointer-from-center: ${clamp(
-          Math.hypot(percentY - 50, percentX - 50) / 50,
-          0,
-          1
-        )};
+        --pointer-from-center: ${clamp(Math.hypot(percentY - 50, percentX - 50) / 50, 0, 1)};
         --pointer-from-top: ${percentY / 100};
         --pointer-from-left: ${percentX / 100};
         --rotate-x: ${round(-(centerX / 5))}deg;
@@ -195,7 +179,7 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
       startX: number,
       startY: number,
       card: HTMLElement,
-      wrap: HTMLElement
+      wrap: HTMLElement,
     ) => {
       const startTime = performance.now();
       const targetX = wrap.clientWidth / 2;
@@ -224,12 +208,7 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
     const wrap = wrapRef.current;
     if (!card || !wrap || !animationHandlers) return;
     const rect = card.getBoundingClientRect();
-    animationHandlers.updateCardTransform(
-      event.clientX - rect.left,
-      event.clientY - rect.top,
-      card,
-      wrap
-    );
+    animationHandlers.updateCardTransform(event.clientX - rect.left, event.clientY - rect.top, card, wrap);
   }, ANIMATION_CONFIG.THROTTLE_MS);
 
   const handlePointerEnter = useCallback(() => {
@@ -251,31 +230,27 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
         event.offsetX,
         event.offsetY,
         card,
-        wrap
+        wrap,
       );
       wrap.classList.remove(styles.active);
       card.classList.remove(styles.active);
     },
-    [animationHandlers]
+    [animationHandlers],
   );
 
-  const handleDeviceOrientation = useThrottledCallback(
-    (event: DeviceOrientationEvent) => {
-      const card = cardRef.current;
-      const wrap = wrapRef.current;
-      if (!card || !wrap || !animationHandlers) return;
-      const { beta, gamma } = event;
-      if (beta === null || gamma === null) return;
-      animationHandlers.updateCardTransform(
-        card.clientHeight / 2 + gamma * mobileTiltSensitivity,
-        card.clientWidth / 2 +
-          (beta - ANIMATION_CONFIG.DEVICE_BETA_OFFSET) * mobileTiltSensitivity,
-        card,
-        wrap
-      );
-    },
-    ANIMATION_CONFIG.THROTTLE_MS
-  );
+  const handleDeviceOrientation = useThrottledCallback((event: DeviceOrientationEvent) => {
+    const card = cardRef.current;
+    const wrap = wrapRef.current;
+    if (!card || !wrap || !animationHandlers) return;
+    const { beta, gamma } = event;
+    if (beta === null || gamma === null) return;
+    animationHandlers.updateCardTransform(
+      card.clientHeight / 2 + gamma * mobileTiltSensitivity,
+      card.clientWidth / 2 + (beta - ANIMATION_CONFIG.DEVICE_BETA_OFFSET) * mobileTiltSensitivity,
+      card,
+      wrap,
+    );
+  }, ANIMATION_CONFIG.THROTTLE_MS);
 
   useEffect(() => {
     if (!shouldEnableTilt || !animationHandlers) return;
@@ -286,20 +261,15 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
     const handleClick = () => {
       if (!enableMobileTilt || location.protocol !== "https:") return;
 
-      const DeviceMotionEventTyped =
-        window.DeviceMotionEvent as typeof DeviceMotionEvent & {
-          requestPermission?: () => Promise<PermissionState>;
-        };
+      const DeviceMotionEventTyped = window.DeviceMotionEvent as typeof DeviceMotionEvent & {
+        requestPermission?: () => Promise<PermissionState>;
+      };
 
       if (typeof DeviceMotionEventTyped.requestPermission === "function") {
         DeviceMotionEventTyped.requestPermission()
           .then((state: PermissionState) => {
             if (state === "granted") {
-              window.addEventListener(
-                "deviceorientation",
-                handleDeviceOrientation,
-                { passive: true }
-              );
+              window.addEventListener("deviceorientation", handleDeviceOrientation, { passive: true });
             }
           })
           .catch((err: unknown) => {
@@ -320,13 +290,7 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
     const initialX = wrap.clientWidth - ANIMATION_CONFIG.INITIAL_X_OFFSET;
     const initialY = ANIMATION_CONFIG.INITIAL_Y_OFFSET;
     animationHandlers.updateCardTransform(initialX, initialY, card, wrap);
-    animationHandlers.createSmoothAnimation(
-      ANIMATION_CONFIG.INITIAL_DURATION,
-      initialX,
-      initialY,
-      card,
-      wrap
-    );
+    animationHandlers.createSmoothAnimation(ANIMATION_CONFIG.INITIAL_DURATION, initialX, initialY, card, wrap);
     return () => {
       card.removeEventListener("pointerenter", handlePointerEnter);
       card.removeEventListener("pointermove", handlePointerMove);
@@ -350,24 +314,19 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
       ({
         "--icon": iconUrl ? `url(${iconUrl})` : "none",
         "--grain": grainUrl ? `url(${grainUrl})` : "none",
-        "--behind-gradient": showBehindGradient
-          ? behindGradient ?? DEFAULT_BEHIND_GRADIENT
-          : "none",
+        "--behind-gradient": showBehindGradient ? (behindGradient ?? DEFAULT_BEHIND_GRADIENT) : "none",
         "--inner-gradient": innerGradient ?? DEFAULT_INNER_GRADIENT,
-      } as React.CSSProperties),
-    [iconUrl, grainUrl, showBehindGradient, behindGradient, innerGradient]
+      }) as React.CSSProperties,
+    [iconUrl, grainUrl, showBehindGradient, behindGradient, innerGradient],
   );
   const handleContactClick = useCallback(() => {
     onContactClick?.();
   }, [onContactClick]);
-  const handleImageError = useCallback(
-    (e: React.SyntheticEvent<HTMLImageElement>) => {
-      const target = e.currentTarget;
-      target.style.visibility = "hidden";
-      target.setAttribute("aria-hidden", "true");
-    },
-    []
-  );
+  const handleImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    const target = e.currentTarget;
+    target.style.visibility = "hidden";
+    target.setAttribute("aria-hidden", "true");
+  }, []);
   const blurDataURL =
     "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q==";
   return (
@@ -376,16 +335,14 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
         wrapRef.current = el;
         observerRef(el);
       }}
-      className={`${styles["pc-card-wrapper"]} ${className}`.trim()}
+      className={`${styles["pc-card-wrapper"]} ${lite ? styles["pc-lite"] : ""} ${className}`.trim()}
       style={cardStyle}
     >
       <section ref={cardRef} className={styles["pc-card"]}>
         <div className={styles["pc-inside"]}>
           <div className={styles["pc-shine"]} />
           <div className={styles["pc-glare"]} />
-          <div
-            className={`${styles["pc-content"]} ${styles["pc-avatar-content"]}`}
-          >
+          <div className={`${styles["pc-content"]} ${styles["pc-avatar-content"]}`}>
             {avatarUrl && avatarUrl !== "<Placeholder for avatar URL>" ? (
               <Image
                 className={styles.avatar}
@@ -419,9 +376,7 @@ const ProfileCardComponent: React.FC<ProfileCardProps> = (props) => {
               <div className={styles["pc-user-info"]}>
                 <div className={styles["pc-user-details"]}>
                   <div className={styles["pc-mini-avatar"]}>
-                    {(miniAvatarUrl || avatarUrl) &&
-                    (miniAvatarUrl || avatarUrl) !==
-                      "<Placeholder for avatar URL>" ? (
+                    {(miniAvatarUrl || avatarUrl) && (miniAvatarUrl || avatarUrl) !== "<Placeholder for avatar URL>" ? (
                       <Image
                         src={miniAvatarUrl || avatarUrl}
                         alt={`${name || "User"} mini avatar`}

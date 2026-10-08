@@ -529,3 +529,16 @@
     transition: none !important; /* Ensures this transition override takes precedence */
   }
 }
+
+/* Without hardware acceleration: no blurred animated glow, holographic shine or glare (each repaints the
+   card every frame on the CPU) */
+.pc-lite::before {
+  display: none;
+}
+.pc-lite .pc-card {
+  animation: none;
+}
+.pc-lite .pc-shine,
+.pc-lite .pc-glare {
+  display: none;
+}

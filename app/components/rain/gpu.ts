@@ -26,3 +26,10 @@ export function detectGpu(): GpuCapability {
     return "none";
   }
 }
+
+let cached: GpuCapability | null = null;
+/** detectGpu(), run once per page load (it creates and throws away a WebGL context). */
+export function getGpu(): GpuCapability {
+  if (cached === null) cached = detectGpu();
+  return cached;
+}

@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUpRight, CloudLightning, CloudRain, LayoutGrid, RotateCcw } from "lucide-react";
 import { rainStore } from "./store";
-import { detectGpu } from "./gpu";
+import { getGpu } from "./gpu";
 import { computeCityLayout, type CityLayout } from "./layout";
 import ResumeBillboard from "./ResumeBillboard";
 import ResumeDialog from "./ResumeDialog";
@@ -103,7 +103,7 @@ export default function RainProjects({
     }
     if (saved === "rain" || saved === "list") initial = saved;
     else if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) initial = "list";
-    const gpu = detectGpu();
+    const gpu = getGpu();
     if (gpu === "none") {
       initial = "list";
     } else if (gpu === "software" && saved !== "rain") {

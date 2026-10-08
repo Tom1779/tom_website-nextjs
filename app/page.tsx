@@ -7,6 +7,7 @@ import ChromaGrid from "./components/ChromaGrid";
 import BlurText from "./components/BlurText";
 import RainProjects from "./components/rain/RainProjects";
 import AboutDetails from "./components/AboutDetails";
+import { useGpu } from "./components/useGpu";
 import { items } from "./data/items";
 
 // Lazy load heavy components
@@ -20,6 +21,8 @@ const PDFViewer = dynamic(() => import("./components/PDFViewer"), {
 });
 
 export default function Home() {
+  // without hardware acceleration, skip the expensive CSS effects
+  const lite = useGpu() === "software";
   // Memoize items to prevent unnecessary re-renders
   const memoizedItems = useMemo(() => items, []);
 
@@ -129,6 +132,7 @@ export default function Home() {
               avatarUrl="/ME.png"
               showUserInfo={true}
               enableTilt={true}
+              lite={lite}
               enableMobileTilt={false}
               onContactClick={() => {
                 window.open("https://www.linkedin.com/in/tom-arad/", "_blank");
