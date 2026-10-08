@@ -3,29 +3,36 @@
 export interface RainQuality {
   drops: number; // rain streak instances
   splashes: number;
+  dpr: number | [number, number]; // canvas resolution
+  antialias: boolean;
 }
 
-export function getRainQuality(): RainQuality {
-  if (typeof window === "undefined") {
-    return { drops: 2500, splashes: 200 };
-  }
+function baseQuality(): { drops: number; splashes: number } {
   const w = window.innerWidth;
   const dpr = window.devicePixelRatio || 1;
   const coarse = window.matchMedia("(pointer: coarse)").matches;
-
-  if (w < 768 || coarse) {
-    return { drops: 1200, splashes: 120 };
-  }
-  if (w > 2560 || dpr > 2) {
-    return { drops: 2200, splashes: 160 };
-  }
-  if (w > 1920) {
-    return { drops: 3000, splashes: 220 };
-  }
-  if (w > 1200) {
-    return { drops: 3200, splashes: 240 };
-  }
+  if (w < 768 || coarse) return { drops: 1200, splashes: 120 };
+  if (w > 2560 || dpr > 2) return { drops: 2200, splashes: 160 };
+  if (w > 1920) return { drops: 3000, splashes: 220 };
+  if (w > 1200) return { drops: 3200, splashes: 240 };
   return { drops: 2400, splashes: 200 };
+}
+
+export function getRainQuality(): RainQuality {
+  if (typeof window === "undefined") return { drops: 2500, splashes: 200, dpr: [1, 1.5], antialias: true };
+  const base = baseQuality();
+  // Firefox can't tell a page whether hardware acceleration is on, and when it's off every WebGL frame is
+  // copied back to the CPU. That copy scales with the canvas's pixels, so Firefox always gets a lighter
+  // canvas: ~44% fewer pixels, no multisampling, fewer drops.
+  if (/firefox/i.test(navigator.userAgent)) {
+    return {
+      drops: Math.round(base.drops * 0.6),
+      splashes: Math.round(base.splashes * 0.6),
+      dpr: Math.min(window.devicePixelRatio || 1, 1) * 0.75,
+      antialias: false,
+    };
+  }
+  return { ...base, dpr: [1, 1.5], antialias: true };
 }
 
 // Camera setup shared by the scene and the px <-> world helpers
