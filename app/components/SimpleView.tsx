@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { CloudRain, Download, FileText, Github, Linkedin } from "lucide-react";
 import AboutText from "./AboutText";
 import { skills } from "./SkillList";
@@ -30,29 +30,22 @@ const pill =
 export default function SimpleView({ grid, card, projectCount, resumeUrl, notice, onResume, onRain }: SimpleViewProps) {
   const thumb = useResumeThumb(resumeUrl ?? "");
   const thumbSrc = useMemo(() => (thumb ? thumb.toDataURL("image/png") : null), [thumb]);
+  const [backdrop, setBackdrop] = useState<{ glow: string; dots: string } | null>(null);
+  useEffect(() => setBackdrop(paintBackdrop()), []);
 
   return (
     <div className="relative w-full overflow-hidden text-white">
-      {/* backdrop: deep navy to plum, a few soft colour glows and a faint dot grid */}
+      {/* backdrop: deep navy to plum, a few soft colour glows and a faint dot grid, baked into small images
+          once and pinned to the screen. (Live CSS gradients get re-drawn every frame by Firefox's software
+          renderer, which made scrolling stutter without hardware acceleration.) */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0"
+        className="pointer-events-none fixed inset-0"
         style={{
-          background: [
-            "radial-gradient(60rem 36rem at 12% 0%, rgba(45,212,191,0.16), transparent 70%)",
-            "radial-gradient(48rem 40rem at 95% 22%, rgba(139,92,246,0.17), transparent 70%)",
-            "radial-gradient(56rem 36rem at 8% 62%, rgba(59,130,246,0.12), transparent 70%)",
-            "radial-gradient(50rem 34rem at 92% 96%, rgba(251,191,36,0.10), transparent 70%)",
-            "linear-gradient(180deg, #0a1124 0%, #0d1430 32%, #131033 64%, #0b1622 100%)",
-          ].join(","),
-        }}
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 opacity-[0.35]"
-        style={{
-          backgroundImage: "radial-gradient(rgba(255,255,255,0.09) 1px, transparent 1.2px)",
-          backgroundSize: "26px 26px",
+          backgroundColor: "#0d1430",
+          backgroundImage: backdrop ? `url(${backdrop.dots}), url(${backdrop.glow})` : undefined,
+          backgroundSize: "26px 26px, 100% 100%",
+          backgroundRepeat: "repeat, no-repeat",
         }}
       />
 
@@ -187,6 +180,49 @@ export default function SimpleView({ grid, card, projectCount, resumeUrl, notice
       </div>
     </div>
   );
+}
+
+/** Paint the backdrop's glows and dot tile into small images (stretched / tiled by CSS). */
+function paintBackdrop() {
+  const W = 480;
+  const H = 300;
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  const ctx = c.getContext("2d")!;
+  const base = ctx.createLinearGradient(0, 0, 0, H);
+  base.addColorStop(0, "#0a1124");
+  base.addColorStop(0.5, "#0e1433");
+  base.addColorStop(1, "#121032");
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, W, H);
+  // soft elliptical glows: [centre x, centre y, radius x, radius y] as fractions of the screen, colour
+  const glows: [number, number, number, number, string][] = [
+    [0.1, 0.0, 0.62, 0.6, "45,212,191,0.16"],
+    [1.0, 0.35, 0.5, 0.66, "139,92,246,0.17"],
+    [0.0, 0.9, 0.58, 0.6, "59,130,246,0.12"],
+    [0.95, 1.1, 0.52, 0.56, "251,191,36,0.09"],
+  ];
+  for (const [x, y, rx, ry, rgba] of glows) {
+    ctx.save();
+    ctx.translate(x * W, y * H);
+    ctx.scale((rx * W) / (ry * H), 1);
+    const r = ry * H;
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+    g.addColorStop(0, `rgba(${rgba})`);
+    g.addColorStop(1, `rgba(${rgba.replace(/[^,]+$/, "0")})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(-r, -r, r * 2, r * 2);
+    ctx.restore();
+  }
+  const d = document.createElement("canvas");
+  d.width = d.height = 26;
+  const dx = d.getContext("2d")!;
+  dx.fillStyle = "rgba(255,255,255,0.05)";
+  dx.beginPath();
+  dx.arc(13, 13, 1.1, 0, Math.PI * 2);
+  dx.fill();
+  return { glow: c.toDataURL("image/png"), dots: d.toDataURL("image/png") };
 }
 
 function SectionHeading({ id, eyebrow, title }: { id: string; eyebrow: string; title: string }) {
