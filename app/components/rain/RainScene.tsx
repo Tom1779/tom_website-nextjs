@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import City from "./City";
 import Rain from "./Rain";
@@ -16,7 +16,7 @@ import { CAMERA_FOV, CAMERA_Z, getRainQuality, type RainQuality } from "./qualit
 interface RainSceneProps {
   images: string[];
   onReveal: (index: number) => void;
-  /** Called once if the scene renders too slowly on this device. */
+  /** Called if the scene is still too slow on this device after dropping to the lowest resolution. */
   onSlow?: () => void;
 }
 
@@ -24,6 +24,24 @@ interface RainSceneProps {
 export default function RainScene({ images, onReveal, onSlow }: RainSceneProps) {
   const [quality] = useState<RainQuality>(() => getRainQuality());
   const [hidden, setHidden] = useState(false);
+
+  // Adaptive resolution: if the scene can't hold ~50fps (e.g. Firefox copying every WebGL frame back to the
+  // CPU when its hardware acceleration is off), render fewer pixels; give up only if even that's too slow.
+  const [dpr, setDpr] = useState(() => Math.min(typeof window === "undefined" ? 1 : window.devicePixelRatio || 1, 1.5));
+  const dprRef = useRef(dpr);
+  const handleSample = useCallback(
+    (fps: number) => {
+      if (fps >= 50) return;
+      if (fps < 15) return onSlow?.(); // hopeless (software rendering): straight to the list
+      if (dprRef.current > 0.76) {
+        dprRef.current = Math.max(0.75, Math.round((dprRef.current - 0.25) * 100) / 100);
+        setDpr(dprRef.current);
+      } else if (fps < 20) {
+        onSlow?.();
+      }
+    },
+    [onSlow],
+  );
 
   // Stop rendering entirely while the tab is in the background
   useEffect(() => {
@@ -34,10 +52,10 @@ export default function RainScene({ images, onReveal, onSlow }: RainSceneProps) 
   }, []);
 
   return (
-    <div className="fixed inset-0 -z-10 pointer-events-none" aria-hidden="true">
+    <div className="fixed inset-0 -z-10 pointer-events-none" aria-hidden="true" data-dpr={dpr}>
       <Canvas
         frameloop={hidden ? "never" : "always"}
-        dpr={[1, 1.5]}
+        dpr={dpr}
         camera={{ position: [0, 0, CAMERA_Z], fov: CAMERA_FOV, near: 0.1, far: 200 }}
         gl={{ antialias: true, powerPreference: "high-performance", alpha: false }}
         onCreated={({ gl }) => gl.setClearColor("#03060d")}
@@ -51,7 +69,8 @@ export default function RainScene({ images, onReveal, onSlow }: RainSceneProps) 
         <Billboard />
         <Rain count={quality.drops} />
         <Umbrella splashCount={quality.splashes} />
-        {onSlow && <PerfWatch onSlow={onSlow} />}
+        {/* re-measure from scratch after each resolution change */}
+        <PerfWatch key={dpr} onSample={handleSample} />
       </Canvas>
     </div>
   );
