@@ -188,3 +188,21 @@ body {
 html[data-rain] [data-bg-beams] {
   display: none;
 }
+
+/* Firefox (and other Gecko browsers) can't tell us whether hardware acceleration is on, and their software
+   renderer re-draws stretched images, gradient fills, blurred shadows and backdrop blur every frame while
+   scrolling. Keep the simple view flat there; other browsers keep the full look. */
+html[data-gfx="unknown"] nav {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background-color: #0b1a3a;
+}
+html[data-gfx="unknown"] .simple-backdrop {
+  background-image: none !important;
+}
+html[data-gfx="unknown"] .simple-tile {
+  background: rgba(255, 255, 255, 0.045) !important;
+}
+html[data-gfx="unknown"] .simple-shadow {
+  box-shadow: none !important;
+}

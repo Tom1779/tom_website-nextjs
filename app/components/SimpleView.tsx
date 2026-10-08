@@ -40,7 +40,7 @@ export default function SimpleView({ grid, card, projectCount, resumeUrl, notice
           renderer, which made scrolling stutter without hardware acceleration.) */}
       <div
         aria-hidden="true"
-        className="pointer-events-none fixed inset-0"
+        className="simple-backdrop pointer-events-none fixed inset-0"
         style={{
           backgroundColor: "#0d1430",
           backgroundImage: backdrop ? `url(${backdrop.dots}), url(${backdrop.glow})` : undefined,
@@ -143,7 +143,7 @@ export default function SimpleView({ grid, card, projectCount, resumeUrl, notice
                 type="button"
                 onClick={onResume}
                 aria-label="Open Tom's résumé"
-                className="group mx-auto block w-56 -rotate-2 overflow-hidden rounded-md bg-[#e9e4d8] shadow-[0_18px_40px_rgba(0,0,0,0.55)] transition-transform duration-300 hover:rotate-0 hover:scale-[1.02] sm:w-64"
+                className="group mx-auto block w-56 -rotate-2 overflow-hidden simple-shadow rounded-md bg-[#e9e4d8] shadow-[0_18px_40px_rgba(0,0,0,0.55)] transition-transform duration-300 hover:rotate-0 hover:scale-[1.02] sm:w-64"
                 style={{ aspectRatio: "8.5 / 11" }}
               >
                 {thumbSrc ? (

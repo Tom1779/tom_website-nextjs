@@ -23,7 +23,10 @@ export default function BackgroundWrapper() {
   useEffect(() => {
     setMounted(true);
     setIsFirefox(/firefox/i.test(navigator.userAgent));
-    setLite(getGpu() !== "ok");
+    const gpu = getGpu();
+    setLite(gpu !== "ok");
+    // lets CSS strip effects that a browser's software renderer struggles with (see globals.css)
+    document.documentElement.dataset.gfx = gpu;
   }, []);
 
   if (!mounted) return <div className="fixed inset-0 -z-10 bg-neutral-950" />;

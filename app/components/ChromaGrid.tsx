@@ -176,7 +176,7 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
     c.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
   }, []);
 
-  const cardClassName = `group relative flex flex-col ${tiles ? "w-[calc(50%-0.4rem)] sm:w-[250px]" : "w-[300px]"} rounded-[20px] overflow-hidden border border-white/10 hover:border-[var(--card-border)] transition-colors duration-300 cursor-pointer no-underline`;
+  const cardClassName = `${tiles ? "simple-tile " : ""}group relative flex flex-col ${tiles ? "w-[calc(50%-0.4rem)] sm:w-[250px]" : "w-[300px]"} rounded-[20px] overflow-hidden border border-white/10 hover:border-[var(--card-border)] transition-colors duration-300 cursor-pointer no-underline`;
 
   const cardStyle = (c: ChromaItem): React.CSSProperties =>
     ({
