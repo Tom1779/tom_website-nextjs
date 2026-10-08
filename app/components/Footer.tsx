@@ -33,7 +33,11 @@ export default function Footer() {
                   href={link.href}
                   className="flex items-center space-x-2 text-gray-300 hover:text-white transition-colors group"
                   target={link.href.startsWith("http") ? "_blank" : undefined}
-                  rel={link.href.startsWith("http") ? "noopener noreferrer" : undefined}
+                  rel={
+                    link.href.startsWith("http")
+                      ? "noopener noreferrer"
+                      : undefined
+                  }
                 >
                   <link.icon className="w-5 h-5 group-hover:scale-110 transition-transform" />
                   <span className="text-sm font-medium">{link.title}</span>
@@ -43,12 +47,16 @@ export default function Footer() {
             {/* Display email - responsive layout */}
             <div className="flex items-center space-x-2 text-gray-300">
               <Mail className="w-5 h-5" />
-              <span className="text-xs sm:text-sm font-medium break-all">tom.arad.2001@gmail.com</span>
+              <span className="text-xs sm:text-sm font-medium break-all">
+                tom.arad.2001@gmail.com
+              </span>
             </div>
           </div>
 
           {/* Copyright */}
-          <p className="text-gray-400 text-xs sm:text-sm text-center px-4">© 2025 Tom Arad. All rights reserved.</p>
+          <p className="text-gray-400 text-xs sm:text-sm text-center px-4">
+            © 2025 Tom Arad. All rights reserved.
+          </p>
         </div>
       </div>
     </footer>
