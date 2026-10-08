@@ -10,6 +10,7 @@ import { getGpu } from "./gpu";
 import { computeCityLayout, type CityLayout } from "./layout";
 import ResumeBillboard from "./ResumeBillboard";
 import ResumeDialog from "./ResumeDialog";
+import SimpleView from "../SimpleView";
 
 const RainScene = dynamic(() => import("./RainScene"), { ssr: false });
 
@@ -56,23 +57,13 @@ interface RainProjectsProps {
   renderList: () => ReactNode;
   /** The profile card: projected by the bat-signal in the rain view, shown under a title in list view. */
   about?: ReactNode;
-  aboutTitle?: ReactNode;
   /** Bio / skills / links shown beside the card in the pop-up; onResume closes it and opens the résumé. */
   renderAboutDetails?: (onResume: () => void) => ReactNode;
-  /** The résumé PDF: a billboard in the city (rain view) or `resumeInline` under the about card (list view). */
+  /** The résumé PDF: a billboard in the city (rain view), a card in the simple view. */
   resumeUrl?: string;
-  resumeInline?: ReactNode;
 }
 
-export default function RainProjects({
-  items,
-  renderList,
-  about,
-  aboutTitle,
-  renderAboutDetails,
-  resumeUrl,
-  resumeInline,
-}: RainProjectsProps) {
+export default function RainProjects({ items, renderList, about, renderAboutDetails, resumeUrl }: RainProjectsProps) {
   const [mode, setMode] = useState<ViewMode>("rain");
   const [ready, setReady] = useState(false);
   // shown when we fell back to the list because the 3D scene would be (or was) too slow on this device
@@ -180,6 +171,15 @@ export default function RainProjects({
       rainStore.signalCardEl = null;
     };
   }, [mode]);
+
+  // The simple view paints its own backdrop, so skip painting the fixed beams behind it too
+  useEffect(() => {
+    if (mode !== "list" || !ready) return;
+    document.documentElement.dataset.rain = "simple";
+    return () => {
+      if (document.documentElement.dataset.rain === "simple") delete document.documentElement.dataset.rain;
+    };
+  }, [mode, ready]);
 
   // Hide the beams background and track the pointer while the rain view is active
   useEffect(() => {
@@ -350,117 +350,119 @@ export default function RainProjects({
       >
         {showRain && ready && <RainScene images={items.map((p) => p.image)} onReveal={handleReveal} />}
 
-        <header
-          ref={headerRef}
-          className={
-            inSky
-              ? "relative z-20 w-full max-w-6xl px-4 sm:px-8 pt-8 pb-6 flex flex-col md:flex-row items-center justify-between gap-6"
-              : "relative z-20 w-full max-w-6xl px-4 pt-10 pb-4 text-center flex flex-col items-center gap-3"
-          }
-        >
-          <div
+        {showRain && (
+          <header
+            ref={headerRef}
             className={
               inSky
-                ? "flex flex-col items-center md:items-start text-center md:text-left gap-3 md:max-w-lg"
-                : "contents"
+                ? "relative z-20 w-full max-w-6xl px-4 sm:px-8 pt-8 pb-6 flex flex-col md:flex-row items-center justify-between gap-6"
+                : "relative z-20 w-full max-w-6xl px-4 pt-10 pb-4 text-center flex flex-col items-center gap-3"
             }
           >
-            <p className="text-xs sm:text-sm tracking-[0.35em] uppercase text-sky-200/70">Software Engineer</p>
-            <h1 className="text-4xl sm:text-6xl font-bold text-white drop-shadow-[0_2px_18px_rgba(120,160,255,0.35)]">
-              Tom Arad
-            </h1>
-            <h2 id="projects-heading" className="sr-only">
-              Projects
-            </h2>
-            {showRain && (
-              <p className="max-w-xl text-sm sm:text-base text-slate-300/90 font-sans">
-                <span className="pointer-coarse:hidden">
-                  Some windows in the city are frosted over. Hold your umbrella over one to dry it and see what&apos;s
-                  inside.
-                </span>
-                <span className="hidden pointer-coarse:inline">
-                  Some windows are frosted over. Tap one to plant your umbrella over it.
-                </span>
-              </p>
-            )}
-
             <div
-              className={`flex flex-wrap items-center justify-center gap-2 sm:gap-3 font-sans text-sm ${inSky ? "md:justify-start" : ""}`}
+              className={
+                inSky
+                  ? "flex flex-col items-center md:items-start text-center md:text-left gap-3 md:max-w-lg"
+                  : "contents"
+              }
             >
+              <p className="text-xs sm:text-sm tracking-[0.35em] uppercase text-sky-200/70">Software Engineer</p>
+              <h1 className="text-4xl sm:text-6xl font-bold text-white drop-shadow-[0_2px_18px_rgba(120,160,255,0.35)]">
+                Tom Arad
+              </h1>
+              <h2 id="projects-heading" className="sr-only">
+                Projects
+              </h2>
               {showRain && (
-                <>
-                  <button
-                    type="button"
-                    onClick={flash}
-                    className="inline-flex items-center gap-2 rounded-full border border-sky-200/30 bg-slate-900/60 px-4 py-2 text-sky-100 backdrop-blur hover:bg-sky-200/15 hover:border-sky-200/60 transition"
-                  >
-                    <CloudLightning className="w-4 h-4" aria-hidden="true" />
-                    Flash: show me everything
-                  </button>
-                  {/* Always laid out (dimmed until needed) so revealing a window never shifts the city */}
-                  <button
-                    type="button"
-                    onClick={refog}
-                    disabled={!anyRevealed}
-                    className={`inline-flex items-center gap-2 rounded-full border border-white/15 bg-slate-900/60 px-4 py-2 text-slate-200 backdrop-blur hover:bg-white/10 transition ${
-                      anyRevealed ? "opacity-100" : "opacity-40 cursor-not-allowed"
-                    }`}
-                  >
-                    <RotateCcw className="w-4 h-4" aria-hidden="true" />
-                    Fog up again
-                  </button>
-                </>
+                <p className="max-w-xl text-sm sm:text-base text-slate-300/90 font-sans">
+                  <span className="pointer-coarse:hidden">
+                    Some windows in the city are frosted over. Hold your umbrella over one to dry it and see what&apos;s
+                    inside.
+                  </span>
+                  <span className="hidden pointer-coarse:inline">
+                    Some windows are frosted over. Tap one to plant your umbrella over it.
+                  </span>
+                </p>
               )}
-              <button
-                type="button"
-                onClick={() => switchMode(showRain ? "list" : "rain")}
-                aria-pressed={!showRain}
-                className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-slate-900/60 px-4 py-2 text-slate-200 backdrop-blur hover:bg-white/10 transition"
+
+              <div
+                className={`flex flex-wrap items-center justify-center gap-2 sm:gap-3 font-sans text-sm ${inSky ? "md:justify-start" : ""}`}
               >
-                {showRain ? (
+                {showRain && (
                   <>
-                    <LayoutGrid className="w-4 h-4" aria-hidden="true" />
-                    Skip to list view
-                  </>
-                ) : (
-                  <>
-                    <CloudRain className="w-4 h-4" aria-hidden="true" />
-                    Back to the rain
+                    <button
+                      type="button"
+                      onClick={flash}
+                      className="inline-flex items-center gap-2 rounded-full border border-sky-200/30 bg-slate-900/60 px-4 py-2 text-sky-100 backdrop-blur hover:bg-sky-200/15 hover:border-sky-200/60 transition"
+                    >
+                      <CloudLightning className="w-4 h-4" aria-hidden="true" />
+                      Flash: show me everything
+                    </button>
+                    {/* Always laid out (dimmed until needed) so revealing a window never shifts the city */}
+                    <button
+                      type="button"
+                      onClick={refog}
+                      disabled={!anyRevealed}
+                      className={`inline-flex items-center gap-2 rounded-full border border-white/15 bg-slate-900/60 px-4 py-2 text-slate-200 backdrop-blur hover:bg-white/10 transition ${
+                        anyRevealed ? "opacity-100" : "opacity-40 cursor-not-allowed"
+                      }`}
+                    >
+                      <RotateCcw className="w-4 h-4" aria-hidden="true" />
+                      Fog up again
+                    </button>
                   </>
                 )}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => switchMode(showRain ? "list" : "rain")}
+                  aria-pressed={!showRain}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-slate-900/60 px-4 py-2 text-slate-200 backdrop-blur hover:bg-white/10 transition"
+                >
+                  {showRain ? (
+                    <>
+                      <LayoutGrid className="w-4 h-4" aria-hidden="true" />
+                      Skip to list view
+                    </>
+                  ) : (
+                    <>
+                      <CloudRain className="w-4 h-4" aria-hidden="true" />
+                      Back to the rain
+                    </>
+                  )}
+                </button>
+              </div>
+              {slowNotice && !showRain && (
+                <p role="status" className="max-w-md font-sans text-xs text-slate-400">
+                  {slowNotice === "software"
+                    ? "Showing the simple view because the animated city would run slowly here (hardware acceleration looks to be off). You can still go back to the rain."
+                    : "Showing the simple view: this browser can't tell us whether hardware acceleration is on, and the animated city lags without it. If it's on, go ahead and go back to the rain."}
+                </p>
+              )}
             </div>
-            {slowNotice && !showRain && (
-              <p role="status" className="max-w-md font-sans text-xs text-slate-400">
-                {slowNotice === "software"
-                  ? "Showing the simple view because the animated city would run slowly here (hardware acceleration looks to be off). You can still go back to the rain."
-                  : "Showing the simple view: this browser can't tell us whether hardware acceleration is on, and the animated city lags without it. If it's on, go ahead and go back to the rain."}
-              </p>
-            )}
-          </div>
 
-          {/* the profile card, projected into the sky by a searchlight on a rooftop below it */}
-          {/* the signal in the sky: drawn by the scene, this is just its hit-area */}
-          {inSky && (
-            <div className="flex shrink-0 flex-col items-center gap-2">
-              <button
-                ref={signalCardRef}
-                type="button"
-                onClick={() => setProfileOpen(true)}
-                onPointerEnter={() => (rainStore.signalHover = true)}
-                onPointerLeave={() => (rainStore.signalHover = false)}
-                onFocus={() => (rainStore.signalHover = true)}
-                onBlur={() => (rainStore.signalHover = false)}
-                aria-haspopup="dialog"
-                aria-label="About Tom"
-                className="h-44 w-44 sm:h-60 sm:w-60 md:h-64 md:w-64 cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-amber-200/80"
-              />
-              <span className="font-sans text-[11px] tracking-[0.25em] uppercase text-amber-100/60">
-                Answer the signal
-              </span>
-            </div>
-          )}
-        </header>
+            {/* the profile card, projected into the sky by a searchlight on a rooftop below it */}
+            {/* the signal in the sky: drawn by the scene, this is just its hit-area */}
+            {inSky && (
+              <div className="flex shrink-0 flex-col items-center gap-2">
+                <button
+                  ref={signalCardRef}
+                  type="button"
+                  onClick={() => setProfileOpen(true)}
+                  onPointerEnter={() => (rainStore.signalHover = true)}
+                  onPointerLeave={() => (rainStore.signalHover = false)}
+                  onFocus={() => (rainStore.signalHover = true)}
+                  onBlur={() => (rainStore.signalHover = false)}
+                  aria-haspopup="dialog"
+                  aria-label="About Tom"
+                  className="h-44 w-44 sm:h-60 sm:w-60 md:h-64 md:w-64 cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-amber-200/80"
+                />
+                <span className="font-sans text-[11px] tracking-[0.25em] uppercase text-amber-100/60">
+                  Answer the signal
+                </span>
+              </div>
+            )}
+          </header>
+        )}
 
         {showRain ? (
           <div
@@ -539,18 +541,24 @@ export default function RainProjects({
             )}
           </div>
         ) : (
-          <div className="w-full flex flex-col items-center px-4 pb-8">{renderList()}</div>
+          <SimpleView
+            grid={renderList()}
+            card={about}
+            projectCount={items.length}
+            resumeUrl={resumeUrl}
+            notice={
+              slowNotice === "software"
+                ? "Showing the simple view because the animated city would run slowly here (hardware acceleration looks to be off)."
+                : slowNotice === "unknown"
+                  ? "Showing the simple view: this browser can't tell us whether hardware acceleration is on, and the animated city lags without it. If it's on, give the rain a try."
+                  : undefined
+            }
+            onResume={() => setResumeOpen(true)}
+            onRain={() => switchMode("rain")}
+          />
         )}
       </section>
 
-      {/* list view: the classic about card and inline résumé below the projects */}
-      {!showRain && (
-        <div className="w-full flex flex-col items-center gap-14 pt-14 pb-8">
-          {aboutTitle}
-          {about}
-          {resumeInline}
-        </div>
-      )}
       {resumeOpen && resumeUrl && <ResumeDialog url={resumeUrl} onClose={closeResume} />}
       {/* portalled to <body>: <main> is its own stacking context, which would leave the navbar on top */}
       {profileOpen &&

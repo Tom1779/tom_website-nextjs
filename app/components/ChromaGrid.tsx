@@ -22,6 +22,8 @@ export interface ChromaGridProps {
   damping?: number;
   fadeOut?: number;
   ease?: string;
+  /** "tiles": evenly sized colour tiles without the greyscale spotlight (used by the simple view) */
+  variant?: "spotlight" | "tiles";
 }
 
 type SetterFn = (v: number | string) => void;
@@ -33,7 +35,9 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
   damping = 0.45,
   fadeOut = 0.6,
   ease = "power3.out",
+  variant = "spotlight",
 }) => {
+  const tiles = variant === "tiles";
   const rootRef = useRef<HTMLDivElement>(null);
   const gpu = useGpu();
   const lite = gpu !== null && gpu !== "ok";
@@ -172,8 +176,7 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
     c.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
   }, []);
 
-  const cardClassName =
-    "group relative flex flex-col w-[300px] rounded-[20px] overflow-hidden border-2 border-transparent transition-colors duration-300 cursor-pointer no-underline";
+  const cardClassName = `group relative flex flex-col ${tiles ? "w-[calc(50%-0.4rem)] sm:w-[250px]" : "w-[300px]"} rounded-[20px] overflow-hidden border border-white/10 hover:border-[var(--card-border)] transition-colors duration-300 cursor-pointer no-underline`;
 
   const cardStyle = (c: ChromaItem): React.CSSProperties =>
     ({
@@ -194,13 +197,17 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
           willChange: "opacity",
         }}
       />
-      <div className="relative z-10 flex-1 p-[10px] box-border">
+      <div className={`relative z-10 p-[10px] box-border ${tiles ? "" : "flex-1"}`}>
         <Image
           src={c.image}
           alt={c.title}
           height={700}
           width={700}
-          className="w-full h-full object-cover rounded-[10px]"
+          className={
+            tiles
+              ? "w-full aspect-[4/3] object-contain rounded-[10px] bg-white/[0.04] p-3"
+              : "w-full h-full object-cover rounded-[10px]"
+          }
           style={{
             imageRendering: (performanceConfig.simplifyGradient
               ? "optimizeSpeed"
@@ -208,10 +215,18 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
           }}
         />
       </div>
-      <footer className="relative z-10 p-3 text-white font-sans grid grid-rows-[1fr_auto] gap-x-3 gap-y-1">
-        <h3 className="m-0 text-[1.05rem] font-semibold text-center">{c.title}</h3>
+      <footer className="relative z-10 p-2 sm:p-3 text-white font-sans grid grid-rows-[1fr_auto] gap-x-3 gap-y-1">
+        <h3
+          className={`m-0 font-semibold text-center ${tiles ? "text-[0.85rem] sm:text-[1.05rem]" : "text-[1.05rem]"}`}
+        >
+          {c.title}
+        </h3>
         {c.handle && <span className="text-[0.95rem] opacity-80 text-center text-amber-300">{c.handle}</span>}
-        <p className="m-0 text-[0.85rem] opacity-85 text-center">{c.subtitle}</p>
+        <p
+          className={`m-0 text-[0.85rem] opacity-85 text-center ${tiles ? "line-clamp-3 max-sm:text-[0.72rem] sm:line-clamp-4" : ""}`}
+        >
+          {c.subtitle}
+        </p>
         {c.location && <span className="text-[0.85rem] opacity-85 text-right">{c.location}</span>}
       </footer>
     </>
@@ -222,7 +237,7 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
       ref={rootRef}
       onPointerMove={handleMove}
       onPointerLeave={handleLeave}
-      className={`relative w-full min-h-full flex flex-wrap justify-evenly items-start gap-2 ${className}`}
+      className={`relative w-full min-h-full flex flex-wrap ${tiles ? "justify-center items-stretch gap-3 sm:gap-5" : "justify-evenly items-start gap-2"} ${className}`}
       style={
         {
           "--r": `${radius}px`,
@@ -255,7 +270,7 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
 
       {/* Spotlight overlays: they re-mask the whole grid on every mouse move, which crawls without
           hardware acceleration, so they're skipped there (each card keeps its own hover glow) */}
-      {!lite && (
+      {!lite && !tiles && (
         <>
           {/* Base overlay */}
           <div

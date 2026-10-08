@@ -185,6 +185,6 @@ body {
 }
 
 /* The rain canvas covers the page, so skip painting the beams behind it */
-html[data-rain="on"] [data-bg-beams] {
+html[data-rain] [data-bg-beams] {
   display: none;
 }

@@ -1,24 +1,20 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import { Suspense, useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 import ProfileCard from "./components/ProfileCard";
 import ChromaGrid from "./components/ChromaGrid";
-import BlurText from "./components/BlurText";
 import RainProjects from "./components/rain/RainProjects";
 import AboutDetails from "./components/AboutDetails";
 import { useGpu } from "./components/useGpu";
 import { items } from "./data/items";
 
-// Lazy load heavy components
-const PDFViewer = dynamic(() => import("./components/PDFViewer"), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-64 bg-gray-800 rounded-lg animate-pulse flex items-center justify-center">
-      <span className="text-gray-400">Loading PDF...</span>
-    </div>
-  ),
-});
+const ACCENTS: Record<string, string> = {
+  "@nextjs": "#818cf8",
+  "@flutter": "#38bdf8",
+  "@tensorflow": "#f59e0b",
+  "@sklearn": "#34d399",
+  "@valheim": "#f87171",
+};
 
 export default function Home() {
   // without hardware acceleration, skip the expensive CSS effects
@@ -26,6 +22,20 @@ export default function Home() {
   const lite = gpu !== null && gpu !== "ok";
   // Memoize items to prevent unnecessary re-renders
   const memoizedItems = useMemo(() => items, []);
+
+  // the simple view tints each project card by its stack
+  const accentedItems = useMemo(
+    () =>
+      items.map((it) => {
+        const accent = ACCENTS[it.handle ?? ""] ?? "#64748b";
+        return {
+          ...it,
+          borderColor: accent,
+          gradient: `linear-gradient(160deg, ${accent}33 0%, rgba(15,20,40,0.85) 55%, rgba(10,14,30,0.92) 100%)`,
+        };
+      }),
+    [],
+  );
 
   // Scale grid properties based on screen size for performance
   const [gridConfig, setGridConfig] = useState({
@@ -85,9 +95,10 @@ export default function Home() {
         <RainProjects
           items={memoizedItems}
           renderList={() => (
-            <div className="relative w-full max-w-[98rem] overflow-hidden">
+            <div className="relative w-full">
               <ChromaGrid
-                items={memoizedItems}
+                items={accentedItems}
+                variant="tiles"
                 radius={gridConfig.radius}
                 damping={gridConfig.damping}
                 fadeOut={gridConfig.fadeOut}
@@ -97,32 +108,6 @@ export default function Home() {
           )}
           renderAboutDetails={(onResume) => <AboutDetails onResume={onResume} />}
           resumeUrl="TomArad-Resume.pdf"
-          resumeInline={
-            <>
-              {/* Lazy load PDF with suspense boundary */}
-              <Suspense
-                fallback={
-                  <div className="w-full max-w-[800px] h-64 bg-gray-800 rounded-lg animate-pulse flex items-center justify-center">
-                    <span className="text-gray-400">Loading PDF viewer...</span>
-                  </div>
-                }
-              >
-                <div className="w-full max-w-[800px] mx-auto px-4 scroll-mt-24">
-                  <PDFViewer fileUrl="TomArad-Resume.pdf" showToolbar={false} />
-                </div>
-              </Suspense>
-
-              {/* Open in New Tab Button */}
-              <button
-                onClick={() => window.open("/viewer?file=TomArad-Resume.pdf", "_blank")}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors duration-200"
-                aria-label="Open PDF in fullscreen"
-              >
-                Open PDF in Fullscreen
-              </button>
-            </>
-          }
-          aboutTitle={<BlurText text="About Me" delay={150} animateBy="words" direction="top" className="text-4xl" />}
           about={
             <ProfileCard
               name="Tom Arad"

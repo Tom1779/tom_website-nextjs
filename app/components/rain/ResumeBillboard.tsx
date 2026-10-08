@@ -36,10 +36,11 @@ function loadPdfJs(): Promise<PdfJsLib> {
 }
 
 /** Render page 1 of the résumé PDF to an image, so the billboard always shows the current version. */
-function useResumeThumb(url: string) {
+export function useResumeThumb(url: string) {
   const [src, setSrc] = useState<HTMLCanvasElement | null>(null);
   useEffect(() => {
     let cancelled = false;
+    if (!url) return;
     (async () => {
       try {
         const pdfjs = await loadPdfJs();
