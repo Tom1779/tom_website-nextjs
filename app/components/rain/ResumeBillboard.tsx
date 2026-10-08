@@ -127,7 +127,7 @@ function drawSign(rect: Rect, thumb: HTMLCanvasElement | null) {
 
   // the résumé is always shown whole, at real letter-paper proportions; only the layout around it adapts
   const wide = innerW - innerH * PAPER >= 150; // room for the headline beside the page?
-  // a thin band at the very top stays empty for the awning that pops out on hover; then the title, then the page
+  // title strip at the top, then the page (AWNING_ZONE reserves room above the title if the awning needs it)
   const strip = wide ? 0 : 24;
   const avail = innerH - AWNING_ZONE;
   const paperH = wide ? avail : Math.min(avail - strip, innerW / PAPER);

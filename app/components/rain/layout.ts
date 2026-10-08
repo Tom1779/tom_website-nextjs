@@ -6,7 +6,7 @@ export const MAX_PROJECT_WINDOWS = 16;
 
 export const BILLBOARD_PAD = 24; // glow margin painted around the résumé billboard
 export const BILLBOARD_LAMP = 22; // gooseneck lamps above it
-export const AWNING_ZONE = 16; // empty band at the top of the sign that the hover awning hangs over
+export const AWNING_ZONE = 0; // band at the top of the sign the hover awning may hang over (none: it stays above the sign)
 export const GROUND_H = 46; // wet sidewalk + curb the buildings stand on
 export const POOL_H = 220; // the pool the rain gathers in, in front of the sidewalk, at the bottom of the city
 

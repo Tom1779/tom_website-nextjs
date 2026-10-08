@@ -26,7 +26,6 @@ const awningFragment = /* glsl */ `
   uniform vec2 uSize;    // plane size px
   uniform vec4 uAwn;     // centre x, rail y, rail half-width, full face height (local px)
   uniform float uFlare;  // how far the canvas flares past the rail at each side when fully out
-  uniform vec4 uBand;    // marquee band at the top of the sign: x, y, w, h (local px)
   uniform float uBottom; // where the streams land (local px)
   uniform float uExt;
   uniform float uTime;
@@ -50,25 +49,6 @@ const awningFragment = /* glsl */ `
     vec2 p = vec2(vUv.x * uSize.x, (1.0 - vUv.y) * uSize.y);
     float ext = clamp(uExt, 0.0, 1.15);
     vec4 outCol = vec4(0.0);
-
-    // marquee bulbs chasing along the top of the sign (the awning folds out over them)
-    vec2 bq = p - uBand.xy;
-    if (bq.x > -6.0 && bq.x < uBand.z + 6.0 && bq.y > -6.0 && bq.y < uBand.w + 6.0) {
-      float spacing = 14.0;
-      float n = max(1.0, floor(uBand.z / spacing));
-      float gap = uBand.z / n;
-      float i = floor(bq.x / gap);
-      vec2 c = vec2((i + 0.5) * gap, uBand.w * 0.5);
-      float d = length(bq - c);
-      float on = step(fract((i - uTime * 7.0) / 3.0), 0.34);
-      float lit = mix(0.35, 1.0, on);
-      float bulb = 1.0 - smoothstep(2.2, 3.2, d);
-      vec3 bc = vec3(1.0, 0.82, 0.5) * lit;
-      bc += vec3(1.0, 0.95, 0.85) * (1.0 - smoothstep(0.0, 1.4, d)) * on * 0.6; // hot centre
-      outCol = over(outCol, bc, bulb);
-      float glow = exp(-d / 4.0) * 0.55 * on * (1.0 - bulb);
-      outCol = over(outCol, vec3(1.0, 0.75, 0.4), glow);
-    }
 
     float cx = uAwn.x;
     float railY = uAwn.y;
@@ -182,7 +162,6 @@ export default function Billboard() {
       uSize: { value: new THREE.Vector2(1, 1) },
       uAwn: { value: new THREE.Vector4() },
       uFlare: { value: 0 },
-      uBand: { value: new THREE.Vector4() },
       uBottom: { value: 0 },
       uExt: { value: 0 },
       uTime: { value: 0 },
@@ -239,14 +218,14 @@ export default function Billboard() {
     e.x = Math.max(0, e.x + e.v * dt);
     // the rail sits in the gap between the windows above and the sign, never over the windows
     const clearance = L.gap.y * 0.65; // window bottom -> sign top
-    const railY = sy - Math.max(4, Math.min(24, clearance - 4));
+    const railY = sy - Math.max(4, Math.min(28, clearance - 2));
     const cxA = sx + b.w / 2;
     const railHW = b.w / 2 + AWN_OVER;
     const hem = railHW + AWN_FLARE * Math.min(1, e.x);
     rainStore.awning.x0 = cxA - hem;
     rainStore.awning.x1 = cxA + hem;
-    // never hang lower than the empty band at the top of the sign (keeps the title and page clear)
-    const face = Math.max(6, Math.min(AWN_FACE, sy + AWNING_ZONE - 2 - railY - 9));
+    // the whole awning (face + scallops) fits between the rail and the top of the sign, never over it
+    const face = Math.max(6, Math.min(AWN_FACE, sy + AWNING_ZONE - 1 - railY - 9));
     rainStore.awning.yFront = railY + (face + 9) * Math.min(1, e.x);
     rainStore.awning.yBottom = sy + b.h + 6;
     rainStore.awning.ext = e.x;
@@ -272,7 +251,6 @@ export default function Billboard() {
     au.uSize.value.set(pw, ph);
     au.uAwn.value.set(cxA - px0, railY - py0, railHW, face);
     au.uFlare.value = AWN_FLARE;
-    au.uBand.value.set(sx + 3 - px0, sy + 3 - py0, b.w - 6, AWNING_ZONE);
     au.uBottom.value = sy + b.h + 6 - py0;
     au.uExt.value = e.x;
     au.uTime.value = state.clock.elapsedTime;
