@@ -4,6 +4,8 @@
 export const MAX_BUILDINGS = 8;
 export const MAX_PROJECT_WINDOWS = 16;
 
+export const BILLBOARD_PAD = 24; // glow margin painted around the résumé billboard
+export const BILLBOARD_LAMP = 22; // gooseneck lamps above it
 export const GROUND_H = 46; // wet sidewalk + curb the buildings stand on
 export const POOL_H = 220; // the pool the rain gathers in, in front of the sidewalk, at the bottom of the city
 

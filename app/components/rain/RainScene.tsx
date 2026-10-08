@@ -6,6 +6,7 @@ import City from "./City";
 import Rain from "./Rain";
 import Skyline from "./Skyline";
 import Signal from "./Signal";
+import Billboard from "./Billboard";
 import WindowParticles from "./WindowParticles";
 import Umbrella from "./Umbrella";
 import Lightning from "./Lightning";
@@ -44,6 +45,7 @@ export default function RainScene({ images, onReveal }: RainSceneProps) {
         <Signal />
         <Skyline images={images} onReveal={onReveal} />
         <WindowParticles images={images} />
+        <Billboard />
         <Rain count={quality.drops} />
         <Umbrella splashCount={quality.splashes} />
       </Canvas>

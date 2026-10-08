@@ -21,6 +21,10 @@ export const rainStore = {
   // the signal projected into the sky by the searchlight (a button that opens the profile card)
   signalCardEl: null as HTMLElement | null,
   signalHover: false,
+  // the résumé billboard, painted by the DOM and shown in the scene (so the rain falls in front of it)
+  billboardCanvas: null as HTMLCanvasElement | null,
+  billboardVersion: 0,
+  billboardHover: false,
   layout: null as CityLayout | null,
   dryness: new Float32Array(MAX_PROJECTS),
   // eased dryness actually shown on screen (shared by the window shader and its pixel cloud)
