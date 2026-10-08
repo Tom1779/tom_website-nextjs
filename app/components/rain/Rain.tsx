@@ -57,7 +57,9 @@ const vertexShader = /* glsl */ `
     float tipY = (y + dir.y * len * 0.5) / depthScale;
     visible *= step(uStopY, tipY);
     // the billboard's awning keeps the rain off the sign (its water runs off at the ends instead)
-    float awn = step(uAwn.x, p0.x) * step(p0.x, uAwn.y) * step(tipY, uAwn.z) * step(uAwn.w, tipY);
+    // hide any streak that overlaps the sheltered area at all, not just ones whose tip is inside it
+    float topY = (y - dir.y * len * 0.5) / depthScale;
+    float awn = step(uAwn.x, p0.x) * step(p0.x, uAwn.y) * step(tipY, uAwn.z) * step(uAwn.w, topY);
     visible *= 1.0 - awn;
 
     vec2 pos = vec2(x, y) + perp * position.x * width + dir * position.y * len;
