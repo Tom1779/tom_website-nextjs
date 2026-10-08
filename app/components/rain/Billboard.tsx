@@ -7,9 +7,9 @@ import { rainStore } from "./store";
 import { BILLBOARD_LAMP, BILLBOARD_PAD } from "./layout";
 import { pxToWorld, worldPerPixel } from "./quality";
 
-const AWN_OVER = 10; // px the awning sticks out past each side of the sign
-const AWN_UP = BILLBOARD_LAMP + 10; // attaches to the wall this far above the sign (over the lamps)
-const AWN_DEPTH = 26; // px the sloping awning covers when fully out
+const AWN_OVER = 6; // px the rail sticks out past each side of the sign
+const AWN_FLARE = 14; // px the canvas flares out past the rail at its hem
+const AWN_FACE = 30; // px height of the canvas face when fully out
 const AWN_MARGIN = 40; // extra plane around the awning for the streams and splashes
 
 const vertexShader = /* glsl */ `
@@ -23,8 +23,9 @@ const vertexShader = /* glsl */ `
 // A striped awning that unfolds over the billboard, and the rain it catches running off both ends in
 // thin streams down the sides of the sign. Local px: (0,0) is the plane's top-left.
 const awningFragment = /* glsl */ `
-  uniform vec2 uSize;   // plane size px
-  uniform vec4 uAwn;    // awning left x, attach y, width, full depth (local px)
+  uniform vec2 uSize;    // plane size px
+  uniform vec4 uAwn;     // centre x, rail y, rail half-width, full face height (local px)
+  uniform float uFlare;  // how far the canvas flares past the rail at each side when fully out
   uniform float uBottom; // where the streams land (local px)
   uniform float uExt;
   uniform float uTime;
@@ -33,57 +34,96 @@ const awningFragment = /* glsl */ `
 
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 
+  const float STRIPES = 22.0;
+  const vec3 RED = vec3(0.62, 0.07, 0.09);
+  const vec3 CREAM = vec3(0.9, 0.88, 0.84);
+
+  // half-width of the canvas at v (0 at the rail .. 1 at the bottom edge): rounded shoulders
+  float halfW(float v, float ext) {
+    return uAwn.z + uFlare * ext * pow(sin(clamp(v, 0.0, 1.0) * 1.5708), 0.55);
+  }
+
+  vec4 over(vec4 dst, vec3 c, float a) { return vec4(mix(dst.rgb, c, a), a + dst.a * (1.0 - a)); }
+
   void main() {
     vec2 p = vec2(vUv.x * uSize.x, (1.0 - vUv.y) * uSize.y);
-    float ext = clamp(uExt, 0.0, 1.2);
+    float ext = clamp(uExt, 0.0, 1.15);
     vec4 outCol = vec4(0.0);
+    float cx = uAwn.x;
+    float railY = uAwn.y;
+    float faceH = uAwn.w * ext;
+    float valH = 9.0 * min(ext, 1.0);
+    float dx = p.x - cx;
 
-    float x0 = uAwn.x;
-    float x1 = uAwn.x + uAwn.z;
-    float yA = uAwn.y;
-    float d = uAwn.w * ext;              // how far it has unfolded (seen from the front, it hangs lower)
-    float yF = yA + d;                   // front edge
-    float lx = p.x - x0;
+    if (ext > 0.02) {
+      // soft shadow the awning casts on the sign below it
+      float botY = railY + faceH + valH;
+      float hwB = halfW(1.0, ext);
+      float sh = step(botY - 2.0, p.y) * (1.0 - smoothstep(0.0, 22.0, p.y - botY)) * (1.0 - smoothstep(hwB - 6.0, hwB + 4.0, abs(dx)));
+      outCol = vec4(0.0, 0.0, 0.0, sh * 0.45 * min(ext, 1.0));
 
-    // canvas: vertical stripes, darker up at the wall, wet sheen
-    if (ext > 0.02 && p.x >= x0 && p.x <= x1 && p.y >= yA && p.y <= yF) {
-      float t = (p.y - yA) / max(d, 1.0);
-      float stripe = step(0.5, fract(lx / 18.0));
-      vec3 c = mix(vec3(0.42, 0.07, 0.09), vec3(0.86, 0.8, 0.68), stripe);
-      c *= 0.55 + 0.45 * t;
-      c += vec3(0.25) * exp(-abs(t - 0.35) * 12.0) * 0.25;
-      outCol = vec4(c, 1.0);
-    }
-    // scalloped valance along the front edge, lit from below by the sign's lamps
-    float vh = 9.0 * min(ext, 1.0);
-    if (ext > 0.02 && p.x >= x0 && p.x <= x1 && p.y > yF && p.y < yF + vh) {
-      float cell = fract(lx / 18.0) - 0.5;
-      float edge = yF + vh * (0.55 + 0.45 * sqrt(max(0.0, 1.0 - cell * cell * 4.0)));
-      if (p.y < edge) {
-        float stripe = step(0.5, fract(lx / 18.0));
-        vec3 c = mix(vec3(0.42, 0.07, 0.09), vec3(0.86, 0.8, 0.68), stripe) * 0.9;
-        c += vec3(1.0, 0.8, 0.5) * 0.25 * smoothstep(yF, edge, p.y);
-        outCol = vec4(c, 1.0);
+      // the canvas face
+      float v = (p.y - railY) / max(faceH, 1.0);
+      if (v >= 0.0 && v <= 1.0) {
+        float hw = halfW(v, ext);
+        float u = dx / hw; // -1..1 across the canvas, so the stripes fan out with the flare
+        if (abs(u) <= 1.0) {
+          float sCoord = (u * 0.5 + 0.5) * STRIPES;
+          float stripe = step(0.5, fract(sCoord));
+          vec3 c = mix(RED, CREAM, stripe);
+          // rounded: a highlight across the upper belly, darker at the shoulders and the hem
+          float light = 0.62 + 0.42 * exp(-pow((v - 0.3) / 0.28, 2.0)) - 0.18 * v;
+          light *= 1.0 - 0.3 * pow(abs(u), 6.0);
+          c *= light;
+          // soft seam between stripes
+          c *= 0.9 + 0.1 * smoothstep(0.0, 0.08, min(fract(sCoord), 1.0 - fract(sCoord)));
+          // wet sheen and the warm lamp light from the sign below
+          c += vec3(1.0) * 0.07 * exp(-pow((v - 0.22) / 0.06, 2.0));
+          c += vec3(1.0, 0.8, 0.5) * 0.12 * v * v;
+          float aa = 1.0 - smoothstep(hw - 1.0, hw + 0.5, abs(dx));
+          outCol = over(outCol, c, aa);
+        }
       }
+
+      // scalloped valance: one scallop per stripe, following the flare
+      if (p.y > railY + faceH - 1.0 && p.y < railY + faceH + valH) {
+        float hw = halfW(1.0, ext);
+        float u = dx / hw;
+        if (abs(u) <= 1.0) {
+          float sCoord = (u * 0.5 + 0.5) * STRIPES;
+          float f = fract(sCoord) - 0.5;
+          float edge = railY + faceH + valH * (0.35 + 0.65 * sqrt(max(0.0, 1.0 - f * f * 4.0)));
+          if (p.y < edge) {
+            float stripe = step(0.5, fract(sCoord));
+            vec3 c = mix(RED, CREAM, stripe) * (0.62 - 0.18 * (p.y - railY - faceH) / max(valH, 1.0));
+            c += vec3(1.0, 0.8, 0.5) * 0.14;
+            outCol = over(outCol, c, 1.0 - smoothstep(edge - 1.0, edge, p.y));
+          }
+        }
+      }
+
+      // the rail it rolls out from, with small end brackets
+      float railHW = uAwn.z + 3.0;
+      float rail = step(abs(dx), railHW) * step(railY - 3.0, p.y) * step(p.y, railY + 1.0);
+      float caps = step(railHW - 3.0, abs(dx)) * step(abs(dx), railHW) * step(railY - 5.0, p.y) * step(p.y, railY + 3.0);
+      outCol = over(outCol, vec3(0.18, 0.19, 0.22) * (1.0 + 0.6 * step(p.y, railY - 2.0)), clamp(rail + caps, 0.0, 1.0));
     }
 
-    // the water it catches pours off both ends in thin wobbly streams, landing with a splash
+    // the water it catches pours off its two lower corners in thin wobbly streams, landing with a splash
     float flow = smoothstep(0.35, 1.0, ext);
+    float hwB = halfW(1.0, ext);
     for (int s = 0; s < 2; s++) {
-      float sx = s == 0 ? x0 + 2.0 : x1 - 2.0;
-      float top = yF + vh * 0.6;
+      float sx = cx + (s == 0 ? -1.0 : 1.0) * (hwB - 2.0);
+      float top = railY + faceH + valH * 0.5;
       if (p.y > top && p.y < uBottom) {
         float wob = sin(p.y * 0.12 + uTime * 9.0 + float(s) * 2.0) * 0.8;
         float core = 1.0 - smoothstep(0.5, 1.4, abs(p.x - sx - wob));
-        // dashes of falling water, denser near the top where it leaves the awning
         float seg = fract((p.y - uTime * 520.0) / 22.0 + float(s) * 0.37);
         float dash = smoothstep(0.0, 0.1, seg) * (1.0 - smoothstep(0.55, 0.75, seg));
         float near = exp(-(p.y - top) / 60.0);
         float a = core * mix(dash, 1.0, near * 0.7) * 0.7 * flow;
-        outCol = mix(outCol, vec4(0.72, 0.82, 0.96, 1.0), a * (1.0 - outCol.a));
-        outCol.a = max(outCol.a, a);
+        outCol = over(outCol, vec3(0.72, 0.82, 0.96), a);
       }
-      // splash where the stream lands
       vec2 q = p - vec2(sx, uBottom);
       float burst = 0.0;
       for (int k = 0; k < 4; k++) {
@@ -93,9 +133,7 @@ const awningFragment = /* glsl */ `
         burst = max(burst, (1.0 - smoothstep(0.6, 1.4, length(q - dp))) * (1.0 - ph));
       }
       float ring = exp(-abs(length(q * vec2(1.0, 3.0)) - fract(uTime * 2.2) * 10.0) * 1.5) * (1.0 - fract(uTime * 2.2));
-      float sa = clamp(burst + ring * 0.6, 0.0, 1.0) * flow;
-      outCol = mix(outCol, vec4(0.72, 0.82, 0.96, 1.0), sa * (1.0 - outCol.a));
-      outCol.a = max(outCol.a, sa);
+      outCol = over(outCol, vec3(0.72, 0.82, 0.96), clamp(burst + ring * 0.6, 0.0, 1.0) * flow);
     }
 
     outCol.rgb += vec3(0.3, 0.33, 0.45) * uFlash * 0.4 * outCol.a;
@@ -122,6 +160,7 @@ export default function Billboard() {
     () => ({
       uSize: { value: new THREE.Vector2(1, 1) },
       uAwn: { value: new THREE.Vector4() },
+      uFlare: { value: 0 },
       uBottom: { value: 0 },
       uExt: { value: 0 },
       uTime: { value: 0 },
@@ -176,12 +215,15 @@ export default function Billboard() {
     const e = ext.current;
     e.v += (140 * (target - e.x) - 15 * e.v) * dt;
     e.x = Math.max(0, e.x + e.v * dt);
-    const ax0 = sx - AWN_OVER;
-    const ax1 = sx + b.w + AWN_OVER;
-    const aTop = sy - AWN_UP;
-    rainStore.awning.x0 = ax0;
-    rainStore.awning.x1 = ax1;
-    rainStore.awning.yFront = aTop + AWN_DEPTH * Math.min(1, e.x);
+    // the rail sits in the gap between the windows above and the sign, never over the windows
+    const clearance = L.gap.y * 0.65; // window bottom -> sign top
+    const railY = sy - Math.max(4, Math.min(24, clearance - 4));
+    const cxA = sx + b.w / 2;
+    const railHW = b.w / 2 + AWN_OVER;
+    const hem = railHW + AWN_FLARE * Math.min(1, e.x);
+    rainStore.awning.x0 = cxA - hem;
+    rainStore.awning.x1 = cxA + hem;
+    rainStore.awning.yFront = railY + (AWN_FACE + 9) * Math.min(1, e.x);
     rainStore.awning.yBottom = sy + b.h + 6;
     rainStore.awning.ext = e.x;
     if (!visible) return;
@@ -196,15 +238,16 @@ export default function Billboard() {
     mt.color.setRGB(lum, lum, lum);
 
     // awning + streams plane: from above the awning down past the bottom of the sign
-    const px0 = ax0 - AWN_MARGIN;
-    const py0 = aTop - 4;
-    const pw = ax1 - ax0 + AWN_MARGIN * 2;
+    const px0 = cxA - railHW - AWN_FLARE * 1.2 - AWN_MARGIN;
+    const py0 = railY - 8;
+    const pw = (railHW + AWN_FLARE * 1.2 + AWN_MARGIN) * 2;
     const ph = sy + b.h + AWN_MARGIN - py0;
     const [acx, acy] = pxToWorld(px0 + pw / 2, py0 + ph / 2, size.width, size.height, 0);
     am.position.set(acx, acy, 0.02);
     am.scale.set(pw * k, ph * k, 1);
     au.uSize.value.set(pw, ph);
-    au.uAwn.value.set(AWN_MARGIN, aTop - py0, ax1 - ax0, AWN_DEPTH);
+    au.uAwn.value.set(cxA - px0, railY - py0, railHW, AWN_FACE);
+    au.uFlare.value = AWN_FLARE;
     au.uBottom.value = sy + b.h + 6 - py0;
     au.uExt.value = e.x;
     au.uTime.value = state.clock.elapsedTime;
