@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BILLBOARD_LAMP, BILLBOARD_PAD, type Rect } from "./layout";
+import { AWNING_ZONE, BILLBOARD_LAMP, BILLBOARD_PAD, type Rect } from "./layout";
 import { rainStore } from "./store";
 
 // Same pdf.js build the résumé viewer uses, loaded from the CDN at runtime (bundling pdfjs-dist directly
@@ -127,22 +127,25 @@ function drawSign(rect: Rect, thumb: HTMLCanvasElement | null) {
 
   // the résumé is always shown whole, at real letter-paper proportions; only the layout around it adapts
   const wide = innerW - innerH * PAPER >= 150; // room for the headline beside the page?
-  const strip = wide ? 0 : 26;
-  const paperH = wide ? innerH : Math.min(innerH - strip, innerW / PAPER);
+  // a thin band at the very top stays empty for the awning that pops out on hover; then the title, then the page
+  const strip = wide ? 0 : 24;
+  const avail = innerH - AWNING_ZONE;
+  const paperH = wide ? avail : Math.min(avail - strip, innerW / PAPER);
   const paperW = paperH * PAPER;
   const px = wide ? inX : inX + (innerW - paperW) / 2;
-  const py = inY + strip;
+  const py = inY + AWNING_ZONE + strip;
+  const titleY = inY + AWNING_ZONE + strip / 2;
 
   ctx.textBaseline = "middle";
   if (!wide) {
     ctx.fillStyle = "#ffffff";
     ctx.font = "700 11px Orbitron, sans-serif";
     ctx.letterSpacing = "2px";
-    ctx.fillText("RÉSUMÉ", inX + 8, inY + strip / 2);
+    ctx.fillText("RÉSUMÉ", inX + 8, titleY);
     ctx.letterSpacing = "0px";
     ctx.fillStyle = "rgba(254,243,199,0.9)";
     ctx.font = "13px sans-serif";
-    ctx.fillText("↗", inX + innerW - 18, inY + strip / 2);
+    ctx.fillText("↗", inX + innerW - 18, titleY);
   }
 
   // the résumé: always the whole first page
@@ -157,7 +160,7 @@ function drawSign(rect: Rect, thumb: HTMLCanvasElement | null) {
 
   if (wide) {
     const tx = px + paperW + 16;
-    const cy = inY + innerH / 2;
+    const cy = py + paperH / 2;
     ctx.fillStyle = "rgba(253,230,138,0.7)";
     ctx.font = "10px sans-serif";
     ctx.letterSpacing = "3px";

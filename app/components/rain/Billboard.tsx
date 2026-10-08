@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { rainStore } from "./store";
-import { BILLBOARD_LAMP, BILLBOARD_PAD } from "./layout";
+import { AWNING_ZONE, BILLBOARD_LAMP, BILLBOARD_PAD } from "./layout";
 import { pxToWorld, worldPerPixel } from "./quality";
 
 const AWN_OVER = 6; // px the rail sticks out past each side of the sign
@@ -223,7 +223,9 @@ export default function Billboard() {
     const hem = railHW + AWN_FLARE * Math.min(1, e.x);
     rainStore.awning.x0 = cxA - hem;
     rainStore.awning.x1 = cxA + hem;
-    rainStore.awning.yFront = railY + (AWN_FACE + 9) * Math.min(1, e.x);
+    // never hang lower than the empty band at the top of the sign (keeps the title and page clear)
+    const face = Math.max(6, Math.min(AWN_FACE, sy + AWNING_ZONE - 2 - railY - 9));
+    rainStore.awning.yFront = railY + (face + 9) * Math.min(1, e.x);
     rainStore.awning.yBottom = sy + b.h + 6;
     rainStore.awning.ext = e.x;
     if (!visible) return;
@@ -246,7 +248,7 @@ export default function Billboard() {
     am.position.set(acx, acy, 0.02);
     am.scale.set(pw * k, ph * k, 1);
     au.uSize.value.set(pw, ph);
-    au.uAwn.value.set(cxA - px0, railY - py0, railHW, AWN_FACE);
+    au.uAwn.value.set(cxA - px0, railY - py0, railHW, face);
     au.uFlare.value = AWN_FLARE;
     au.uBottom.value = sy + b.h + 6 - py0;
     au.uExt.value = e.x;
