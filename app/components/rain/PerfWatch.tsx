@@ -3,28 +3,29 @@
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 
-const WARMUP = 1.5; // s: ignore shader compiling / texture uploads / resizes right after (re)mount
-const WINDOW = 2; // s: average the frame rate over windows this long
-const MAX_WINDOWS = 3;
+const SETTLE_FRAMES = 12; // consecutive quick frames before measuring (shader compiles stall the first ones)
+const QUICK = 0.1; // s: a frame this fast counts towards settling
+const WINDOW = 1200; // ms of real time to average the frame rate over
 
 /**
- * Reports the scene's average frame rate a few times after mount (remount it, e.g. with a new key, to
- * measure again after changing quality).
+ * Reports the scene's average frame rate once, as soon as it has settled after mount (used for the hidden
+ * first-visit test).
  */
 export default function PerfWatch({ onSample }: { onSample: (fps: number) => void }) {
-  const s = useRef({ t: 0, start: WARMUP, frames: 0, windows: 0 });
+  const s = useRef({ settled: 0, start: 0, frames: 0, done: false });
   useFrame((_, dt) => {
     const st = s.current;
-    if (st.windows >= MAX_WINDOWS) return;
-    // a hidden tab pauses rendering; huge gaps aren't the scene's fault
-    st.t += Math.min(dt, 0.25);
-    if (st.t < st.start) return;
+    if (st.done) return;
+    if (!st.start) {
+      st.settled = dt < QUICK ? st.settled + 1 : 0;
+      if (st.settled >= SETTLE_FRAMES) st.start = performance.now();
+      return;
+    }
     st.frames++;
-    if (st.t >= st.start + WINDOW) {
-      onSample(st.frames / WINDOW);
-      st.windows++;
-      st.start = st.t;
-      st.frames = 0;
+    const elapsed = performance.now() - st.start;
+    if (elapsed >= WINDOW) {
+      st.done = true;
+      onSample((st.frames * 1000) / elapsed);
     }
   });
   return null;

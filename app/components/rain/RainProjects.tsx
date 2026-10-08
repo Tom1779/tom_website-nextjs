@@ -22,7 +22,30 @@ export interface RainProject {
 }
 
 type ViewMode = "rain" | "list";
-const STORAGE_KEY = "tom-site-view";
+// the visitor's own choice of view (v2: earlier saved values predate the performance checks)
+const STORAGE_KEY = "tom-site-view-2";
+// this device's measured verdict on the rain scene, so the check runs once (re-checked after a week)
+const PERF_KEY = "tom-site-perf";
+const PERF_TTL = 7 * 24 * 3600 * 1000;
+const MIN_FPS = 50;
+
+type Perf = "unknown" | "fast" | "slow";
+function readPerf(): Perf {
+  try {
+    const v = JSON.parse(localStorage.getItem(PERF_KEY) || "null") as { v: Perf; t: number } | null;
+    if (v && Date.now() - v.t < PERF_TTL && (v.v === "fast" || v.v === "slow")) return v.v;
+  } catch {
+    /* storage unavailable or malformed */
+  }
+  return "unknown";
+}
+function writePerf(v: Perf) {
+  try {
+    localStorage.setItem(PERF_KEY, JSON.stringify({ v, t: Date.now() }));
+  } catch {
+    /* storage unavailable */
+  }
+}
 const CARD_W = 280;
 const HIT = 8; // px of forgiveness around each small project window
 
@@ -76,7 +99,10 @@ export default function RainProjects({
   const [ready, setReady] = useState(false);
   // shown when we fell back to the list because the 3D scene would be (or was) too slow on this device
   const [slowNotice, setSlowNotice] = useState(false);
-  const forcedRain = useRef(false);
+  // whether the rain scene runs well on this device: "unknown" means it's being measured, hidden
+  const [perf, setPerf] = useState<Perf>("unknown");
+  // the visitor picked the rain themselves: never test or switch them away from it
+  const [forcedRain, setForcedRain] = useState(false);
   const [revealed, setRevealed] = useState<boolean[]>(() => items.map(() => false));
   const [layout, setLayout] = useState<CityLayout | null>(null);
   // project whose detail card is showing (hovered / focused / tapped)
@@ -101,13 +127,16 @@ export default function RainProjects({
     } catch {
       /* storage unavailable */
     }
+    const knownPerf = readPerf();
+    setPerf(knownPerf);
     if (saved === "rain" || saved === "list") initial = saved;
     else if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) initial = "list";
+    if (saved === "rain") setForcedRain(true);
     const gpu = getGpu();
     if (gpu === "none") {
       initial = "list";
-    } else if (gpu === "software" && saved !== "rain") {
-      // hardware acceleration is off: the scene would crawl, so start with the list (they can still opt in)
+    } else if (saved !== "rain" && (gpu === "software" || knownPerf === "slow")) {
+      // hardware acceleration is off, or this device measured too slow before: start with the list
       initial = "list";
       setSlowNotice(true);
     }
@@ -115,15 +144,19 @@ export default function RainProjects({
     setReady(true);
   }, []);
 
-  // The scene measured itself as too slow: fall back to the list unless they chose the rain themselves
-  const handleSlow = useCallback(() => {
-    if (forcedRain.current) return;
-    setMode("list");
-    setSlowNotice(true);
+  // The hidden test run finished: show the city, or (before anything was shown) the simple view
+  const handleProbe = useCallback((fps: number) => {
+    const verdict: Perf = fps >= MIN_FPS ? "fast" : "slow";
+    writePerf(verdict);
+    setPerf(verdict);
+    if (verdict === "slow") {
+      setMode("list");
+      setSlowNotice(true);
+    }
   }, []);
 
   const switchMode = (next: ViewMode) => {
-    if (next === "rain") forcedRain.current = true;
+    if (next === "rain") setForcedRain(true);
     setSlowNotice(false);
     setMode(next);
     try {
@@ -355,7 +388,12 @@ export default function RainProjects({
         aria-labelledby="projects-heading"
       >
         {showRain && ready && (
-          <RainScene images={items.map((p) => p.image)} onReveal={handleReveal} onSlow={handleSlow} />
+          <RainScene
+            images={items.map((p) => p.image)}
+            onReveal={handleReveal}
+            probing={perf === "unknown" && !forcedRain}
+            onProbe={handleProbe}
+          />
         )}
 
         <header

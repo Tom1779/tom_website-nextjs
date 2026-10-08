@@ -16,31 +16,23 @@ import { CAMERA_FOV, CAMERA_Z, getRainQuality, type RainQuality } from "./qualit
 interface RainSceneProps {
   images: string[];
   onReveal: (index: number) => void;
-  /** Called if the scene is still too slow on this device after dropping to the lowest resolution. */
-  onSlow?: () => void;
+  /** Render hidden and measure the frame rate once (first visit), reporting it via onProbe. */
+  probing?: boolean;
+  onProbe?: (fps: number) => void;
 }
 
 /** Fixed full-screen canvas behind the page. Loaded with next/dynamic + ssr:false. */
-export default function RainScene({ images, onReveal, onSlow }: RainSceneProps) {
+export default function RainScene({ images, onReveal, probing = false, onProbe }: RainSceneProps) {
   const [quality] = useState<RainQuality>(() => getRainQuality());
   const [hidden, setHidden] = useState(false);
-
-  // Adaptive resolution: if the scene can't hold ~50fps (e.g. Firefox copying every WebGL frame back to the
-  // CPU when its hardware acceleration is off), render fewer pixels; give up only if even that's too slow.
-  const [dpr, setDpr] = useState(() => Math.min(typeof window === "undefined" ? 1 : window.devicePixelRatio || 1, 1.5));
-  const dprRef = useRef(dpr);
+  const reported = useRef(false);
   const handleSample = useCallback(
     (fps: number) => {
-      if (fps >= 50) return;
-      if (fps < 15) return onSlow?.(); // hopeless (software rendering): straight to the list
-      if (dprRef.current > 0.76) {
-        dprRef.current = Math.max(0.75, Math.round((dprRef.current - 0.25) * 100) / 100);
-        setDpr(dprRef.current);
-      } else if (fps < 20) {
-        onSlow?.();
-      }
+      if (reported.current) return;
+      reported.current = true;
+      onProbe?.(fps);
     },
-    [onSlow],
+    [onProbe],
   );
 
   // Stop rendering entirely while the tab is in the background
@@ -52,10 +44,17 @@ export default function RainScene({ images, onReveal, onSlow }: RainSceneProps) 
   }, []);
 
   return (
-    <div className="fixed inset-0 -z-10 pointer-events-none" aria-hidden="true" data-dpr={dpr}>
+    // While probing, the scene renders (and is composited, so the measurement includes that cost) but is
+    // practically invisible; it fades in once it's known to run well
+    <div
+      className="fixed inset-0 -z-10 pointer-events-none transition-opacity duration-700"
+      style={{ opacity: probing ? 0.001 : 1 }}
+      aria-hidden="true"
+      data-probing={probing ? "" : undefined}
+    >
       <Canvas
         frameloop={hidden ? "never" : "always"}
-        dpr={dpr}
+        dpr={[1, 1.5]}
         camera={{ position: [0, 0, CAMERA_Z], fov: CAMERA_FOV, near: 0.1, far: 200 }}
         gl={{ antialias: true, powerPreference: "high-performance", alpha: false }}
         onCreated={({ gl }) => gl.setClearColor("#03060d")}
@@ -69,8 +68,7 @@ export default function RainScene({ images, onReveal, onSlow }: RainSceneProps) 
         <Billboard />
         <Rain count={quality.drops} />
         <Umbrella splashCount={quality.splashes} />
-        {/* re-measure from scratch after each resolution change */}
-        <PerfWatch key={dpr} onSample={handleSample} />
+        {probing && <PerfWatch onSample={handleSample} />}
       </Canvas>
     </div>
   );
