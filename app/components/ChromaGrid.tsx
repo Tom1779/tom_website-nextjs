@@ -35,7 +35,8 @@ const ChromaGrid: React.FC<ChromaGridProps> = ({
   ease = "power3.out",
 }) => {
   const rootRef = useRef<HTMLDivElement>(null);
-  const lite = useGpu() === "software";
+  const gpu = useGpu();
+  const lite = gpu !== null && gpu !== "ok";
   const fadeRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const setX = useRef<SetterFn | null>(null);

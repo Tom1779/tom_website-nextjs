@@ -1,7 +1,10 @@
 // Detect whether WebGL is hardware accelerated. With hardware acceleration disabled, browsers fall back to a
 // CPU renderer (SwiftShader, llvmpipe, Microsoft Basic Render…) that runs the rain scene at a crawl.
 
-export type GpuCapability = "ok" | "software" | "none";
+// "unknown": the browser can't report it. Firefox (and other Gecko browsers) keep WebGL on the GPU even with
+// hardware acceleration off and report the same renderer, but composite the page in software, copying every
+// WebGL frame back to the CPU, so the scene lags and there's nothing a page can check.
+export type GpuCapability = "ok" | "software" | "none" | "unknown";
 
 const SOFTWARE_RENDERER = /swiftshader|llvmpipe|softpipe|software|basic render|mesa offscreen|google .*cpu/i;
 
@@ -21,7 +24,10 @@ export function detectGpu(): GpuCapability {
     const info = gl.getExtension("WEBGL_debug_renderer_info");
     const renderer = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
     gl.getExtension("WEBGL_lose_context")?.loseContext();
-    return SOFTWARE_RENDERER.test(renderer) ? "software" : "ok";
+    if (SOFTWARE_RENDERER.test(renderer)) return "software";
+    return /Gecko\/\d|Firefox\//.test(navigator.userAgent) && !/like Gecko/.test(navigator.userAgent)
+      ? "unknown"
+      : "ok";
   } catch {
     return "none";
   }

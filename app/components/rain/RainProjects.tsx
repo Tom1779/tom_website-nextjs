@@ -76,7 +76,8 @@ export default function RainProjects({
   const [mode, setMode] = useState<ViewMode>("rain");
   const [ready, setReady] = useState(false);
   // shown when we fell back to the list because the 3D scene would be (or was) too slow on this device
-  const [slowNotice, setSlowNotice] = useState(false);
+  // why we opened in the simple view instead of the city: acceleration is off, or this browser can't tell us
+  const [slowNotice, setSlowNotice] = useState<"" | "software" | "unknown">("");
   const [revealed, setRevealed] = useState<boolean[]>(() => items.map(() => false));
   const [layout, setLayout] = useState<CityLayout | null>(null);
   // project whose detail card is showing (hovered / focused / tapped)
@@ -106,17 +107,18 @@ export default function RainProjects({
     const gpu = getGpu();
     if (gpu === "none") {
       initial = "list";
-    } else if (saved !== "rain" && gpu === "software") {
-      // hardware acceleration is off (software WebGL): the scene would crawl, so start with the list
+    } else if (saved !== "rain" && (gpu === "software" || gpu === "unknown")) {
+      // hardware acceleration is off (software WebGL), or the browser can't say: the scene could crawl, so
+      // start with the list (they can still choose the rain, which is remembered)
       initial = "list";
-      setSlowNotice(true);
+      setSlowNotice(gpu);
     }
     setMode(initial);
     setReady(true);
   }, []);
 
   const switchMode = (next: ViewMode) => {
-    setSlowNotice(false);
+    setSlowNotice("");
     setMode(next);
     try {
       localStorage.setItem(STORAGE_KEY, next);
@@ -430,8 +432,9 @@ export default function RainProjects({
             </div>
             {slowNotice && !showRain && (
               <p role="status" className="max-w-md font-sans text-xs text-slate-400">
-                Showing the simple view because the animated city would run slowly here (hardware acceleration looks to
-                be off). You can still go back to the rain.
+                {slowNotice === "software"
+                  ? "Showing the simple view because the animated city would run slowly here (hardware acceleration looks to be off). You can still go back to the rain."
+                  : "Showing the simple view: this browser can't tell us whether hardware acceleration is on, and the animated city lags without it. If it's on, go ahead and go back to the rain."}
               </p>
             )}
           </div>

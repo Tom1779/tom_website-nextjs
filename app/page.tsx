@@ -22,7 +22,8 @@ const PDFViewer = dynamic(() => import("./components/PDFViewer"), {
 
 export default function Home() {
   // without hardware acceleration, skip the expensive CSS effects
-  const lite = useGpu() === "software";
+  const gpu = useGpu();
+  const lite = gpu !== null && gpu !== "ok";
   // Memoize items to prevent unnecessary re-renders
   const memoizedItems = useMemo(() => items, []);
 

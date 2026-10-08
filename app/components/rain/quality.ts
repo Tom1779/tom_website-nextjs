@@ -21,17 +21,6 @@ function baseQuality(): { drops: number; splashes: number } {
 export function getRainQuality(): RainQuality {
   if (typeof window === "undefined") return { drops: 2500, splashes: 200, dpr: [1, 1.5], antialias: true };
   const base = baseQuality();
-  // Firefox can't tell a page whether hardware acceleration is on, and when it's off every WebGL frame is
-  // copied back to the CPU. That copy scales with the canvas's pixels, so Firefox always gets a lighter
-  // canvas: ~44% fewer pixels, no multisampling, fewer drops.
-  if (/firefox/i.test(navigator.userAgent)) {
-    return {
-      drops: Math.round(base.drops * 0.6),
-      splashes: Math.round(base.splashes * 0.6),
-      dpr: Math.min(window.devicePixelRatio || 1, 1) * 0.75,
-      antialias: false,
-    };
-  }
   return { ...base, dpr: [1, 1.5], antialias: true };
 }
 
