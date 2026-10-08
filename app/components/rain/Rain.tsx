@@ -21,6 +21,7 @@ const vertexShader = /* glsl */ `
   uniform vec2 uUmbShape;  // radius, canopy height
   uniform float uUmbTilt;
   uniform float uStopY;    // z = 0 plane y where the rain stops (the pool's far edge)
+  uniform vec4 uAwn;       // billboard awning on the z = 0 plane: x0, x1, front-edge y, bottom of the shelter y
 
   varying float vAlpha;
   varying float vT;
@@ -52,10 +53,12 @@ const vertexShader = /* glsl */ `
     float len = aMotion.y * uView.y * (0.65 + 0.5 * uIntensity);
     float width = uPx * mix(1.4, 2.6, smoothstep(-8.0, 6.0, z));
 
-    // the rain lands on the sidewalk under the buildings and stops there (test the streak's lower tip)
     // the rain falls over the pool and stops at the pool's far edge (test the streak's lower tip)
     float tipY = (y + dir.y * len * 0.5) / depthScale;
     visible *= step(uStopY, tipY);
+    // the billboard's awning keeps the rain off the sign (its water runs off at the ends instead)
+    float awn = step(uAwn.x, p0.x) * step(p0.x, uAwn.y) * step(tipY, uAwn.z) * step(uAwn.w, tipY);
+    visible *= 1.0 - awn;
 
     vec2 pos = vec2(x, y) + perp * position.x * width + dir * position.y * len;
     pos *= visible;
@@ -117,6 +120,7 @@ export default function Rain({ count }: { count: number }) {
       uUmbShape: { value: new THREE.Vector2(1, 0.4) },
       uUmbTilt: { value: 0 },
       uStopY: { value: -1e5 },
+      uAwn: { value: new THREE.Vector4(1, -1, 0, 0) },
       uFlash: { value: 0 },
     }),
     [],
@@ -140,6 +144,15 @@ export default function Rain({ count }: { count: number }) {
     // the sidewalk under the buildings, in world y on the z = 0 plane
     const stopPx = rainStore.streetTop - 3 - window.scrollY;
     u.uStopY.value = Number.isFinite(stopPx) ? -(stopPx - size.height / 2) * k : -1e5;
+    // the awning over the billboard (client px -> z = 0 world); it shelters more as it unfolds
+    const a = rainStore.awning;
+    if (a.ext > 0.05) {
+      const cx = (a.x0 + a.x1) / 2;
+      const half = ((a.x1 - a.x0) / 2) * Math.min(1, a.ext);
+      const wx = (px: number) => (px - size.width / 2) * k;
+      const wy = (py: number) => -(py - size.height / 2) * k;
+      u.uAwn.value.set(wx(cx - half), wx(cx + half), wy(a.yFront), wy(a.yBottom));
+    } else u.uAwn.value.set(1, -1, 0, 0);
   });
 
   return (

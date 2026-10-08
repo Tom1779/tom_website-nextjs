@@ -25,6 +25,8 @@ export const rainStore = {
   billboardCanvas: null as HTMLCanvasElement | null,
   billboardVersion: 0,
   billboardHover: false,
+  // the awning that pops out over the billboard on hover: client px, ext 0 (folded) .. 1 (open)
+  awning: { x0: 0, x1: 0, yFront: 0, yBottom: 0, ext: 0 },
   layout: null as CityLayout | null,
   dryness: new Float32Array(MAX_PROJECTS),
   // eased dryness actually shown on screen (shared by the window shader and its pixel cloud)
