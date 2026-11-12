@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { rainStore, MAX_PROJECTS } from "./store";
-import { GROUND_H, MAX_BUILDINGS } from "./layout";
+import { GROUND_H, MAX_BUILDINGS, WINDOW_SCENES } from "./layout";
 import { pxToWorld, worldPerPixel } from "./quality";
 import { umbrellaState, SHAFT } from "./Umbrella";
 
@@ -26,6 +26,7 @@ const vertexShader = /* glsl */ `
 const fragmentShader = /* glsl */ `
   #define MAXB ${MAX_BUILDINGS}
   #define MAXP ${MAX_PROJECTS}
+  #define NSCENE ${WINDOW_SCENES}
   uniform vec2 uSize;
   uniform float uSkyTop;
   uniform float uBase;      // top of the sidewalk: every building stands here
@@ -39,6 +40,10 @@ const fragmentShader = /* glsl */ `
   uniform vec4 uProj[MAXP];  // x, y, w, h
   uniform vec4 uProjS[MAXP]; // dryness, glow, revealed, atlas tile
   uniform int uProjN;
+  uniform vec4 uScene[NSCENE]; // building x, col, row, scene
+  uniform int uSceneN;
+  uniform vec2 uStair[MAXB];   // building x, stairwell column
+  uniform int uStairN;
   uniform sampler2D uAtlas;
   uniform float uTiles;
   uniform float uAtlasReady;
@@ -94,26 +99,247 @@ const fragmentShader = /* glsl */ `
     return vec4(col, 1.0);
   }
 
-  // An ordinary apartment window: lit, TV-lit or dark, with a balcony rail
-  vec3 apartment(vec2 wp, vec2 id) {
+  // ---- little scenes in the lit windows (q: window px / window width, y down, ~0..1.29 tall) ----
+  float sdSeg(vec2 p, vec2 a, vec2 b) {
+    vec2 pa = p - a, ba = b - a;
+    return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0));
+  }
+  float sdRBox(vec2 p, vec2 c, vec2 hs, float r) {
+    vec2 d = abs(p - c) - hs + r;
+    return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - r;
+  }
+  float sdEll(vec2 p, vec2 c, vec2 r) { return (length((p - c) / r) - 1.0) * min(r.x, r.y); }
+  float sdTri(vec2 p, vec2 p0, vec2 p1, vec2 p2) {
+    vec2 e0 = p1 - p0, e1 = p2 - p1, e2 = p0 - p2;
+    vec2 v0 = p - p0, v1 = p - p1, v2 = p - p2;
+    vec2 pq0 = v0 - e0 * clamp(dot(v0, e0) / dot(e0, e0), 0.0, 1.0);
+    vec2 pq1 = v1 - e1 * clamp(dot(v1, e1) / dot(e1, e1), 0.0, 1.0);
+    vec2 pq2 = v2 - e2 * clamp(dot(v2, e2) / dot(e2, e2), 0.0, 1.0);
+    float s = sign(e0.x * e2.y - e0.y * e2.x);
+    vec2 d = min(min(vec2(dot(pq0, pq0), s * (v0.x * e0.y - v0.y * e0.x)),
+                     vec2(dot(pq1, pq1), s * (v1.x * e1.y - v1.y * e1.x))),
+                     vec2(dot(pq2, pq2), s * (v2.x * e2.y - v2.y * e2.x)));
+    return -sqrt(d.x) * sign(d.y);
+  }
+  float smin(float a, float b, float k) {
+    float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+    return mix(b, a, h) - k * h * (1.0 - h);
+  }
+  // trapezoid centred at the origin: half-width r1 at the top (y = -he), r2 at the bottom
+  float sdTrap(vec2 p, float r1, float r2, float he) {
+    vec2 k1 = vec2(r2, he), k2 = vec2(r2 - r1, 2.0 * he);
+    p.x = abs(p.x);
+    vec2 ca = vec2(p.x - min(p.x, p.y < 0.0 ? r1 : r2), abs(p.y) - he);
+    vec2 cb = p - k1 + k2 * clamp(dot(k1 - p, k2) / dot(k2, k2), 0.0, 1.0);
+    float s = (cb.x < 0.0 && ca.y < 0.0) ? -1.0 : 1.0;
+    return s * sqrt(min(dot(ca, ca), dot(cb, cb)));
+  }
+  // head + hair, neck and shoulders of a person whose head is at c; hair: 0 bun, 1 long, 2 curls, 3 cap
+  float person(vec2 q, vec2 c, float hair, float torsoH) {
+    float d = sdEll(q, c, vec2(0.068, 0.078));
+    if (hair < 0.5) d = min(d, length(q - c - vec2(0.0, -0.085)) - 0.038);
+    else if (hair < 1.5) d = smin(d, sdRBox(q, c + vec2(0.0, 0.05), vec2(0.085, 0.11), 0.06), 0.02);
+    else if (hair < 2.5) d = min(d, sdEll(q, c + vec2(0.0, -0.025), vec2(0.1, 0.092)) - 0.006 * sin(atan(q.y - c.y, q.x - c.x) * 9.0));
+    else d = min(d, min(max(length(q - c - vec2(0.0, -0.02)) - 0.078, q.y - c.y + 0.02), sdRBox(q, c + vec2(0.075, -0.03), vec2(0.06, 0.011), 0.006)));
+    d = smin(d, sdRBox(q, c + vec2(0.0, 0.09), vec2(0.036, 0.04), 0.02), 0.02);
+    return smin(d, sdTrap(q - c - vec2(0.0, 0.14 + torsoH), 0.11, 0.085, torsoH) - 0.04, 0.04);
+  }
+
+  // A backlit silhouette (dark, faint warm rim) plus the lit props and glows of one little scene
+  vec3 occupant(vec3 col, vec2 q, vec2 id, float sc) {
+    float h = hash(id + 23.0);
+    float t = uTime + h * 40.0;
+    float R = 0.88; // balcony rail
+    float d = 1e3;
+    vec3 glow = vec3(0.0);
+    vec4 paint = vec4(0.0); // lit props drawn over the silhouette (rgb, coverage)
+    float aa = 1.0 / uWin.x;
+    float hair = floor(hash(id + 25.0) * 4.0);
+
+    if (sc < 0.5) {
+      // coffee: a sip now and then, steam curling off the mug
+      float x = mix(0.3, 0.42, hash(id + 24.0));
+      float k = smoothstep(0.55, 0.95, sin(t * 0.6));
+      d = person(q, vec2(x, 0.46), hair, 0.4);
+      vec2 el = vec2(x + 0.19, 0.86);
+      vec2 hd = mix(vec2(x + 0.22, 0.76), vec2(x + 0.11, 0.55), k);
+      d = min(d, sdSeg(q, vec2(x + 0.13, 0.64), el) - 0.034);
+      d = min(d, sdSeg(q, el, hd) - 0.03);
+      vec2 mg = hd + vec2(0.035, -0.025);
+      d = min(d, sdRBox(q, mg, vec2(0.033, 0.042), 0.008));
+      d = min(d, abs(length(q - mg - vec2(0.042, 0.0)) - 0.02) - 0.007);
+      float sx = q.x - mg.x - 0.014 * sin(q.y * 45.0 - uTime * 3.0);
+      float st = smoothstep(0.01, 0.0, abs(sx)) * smoothstep(mg.y - 0.04, mg.y - 0.08, q.y) * smoothstep(mg.y - 0.26, mg.y - 0.1, q.y);
+      glow += vec3(0.5, 0.48, 0.45) * st * (1.0 - k) * 0.6;
+    } else if (sc < 1.5) {
+      // dance party: swaying and waving under colour-cycling light and a disco ball
+      float tt = t * 2.4;
+      float sw = sin(tt) * 0.035;
+      float x = 0.45 + sw;
+      vec2 hp = vec2(x, 0.43 - abs(sin(tt)) * 0.02);
+      d = person(q, hp, 1.0 + step(0.5, h) * 2.0, 0.1);
+      d = smin(d, length(q - hp - vec2(-0.1 - sin(tt + 1.0) * 0.03, 0.03)) - 0.035, 0.03);
+      d = smin(d, sdTrap(q - vec2(x, 0.86), 0.09, 0.2 + sin(tt * 2.0) * 0.015, 0.14), 0.03);
+      d = min(d, sdSeg(q, vec2(x - 0.05, 0.98), vec2(x - 0.07, 1.3)) - 0.026);
+      d = min(d, sdSeg(q, vec2(x + 0.05, 0.98), vec2(x + 0.09 + sin(tt) * 0.05, 1.28)) - 0.026);
+      vec2 sl = vec2(x - 0.11, 0.58), sr = vec2(x + 0.11, 0.58);
+      vec2 el = sl + vec2(-0.1, -0.09);
+      vec2 er = sr + vec2(0.1, -0.02 + sin(tt) * 0.08);
+      d = min(d, sdSeg(q, sl, el) - 0.025);
+      d = min(d, sdSeg(q, el, el + vec2(-0.02 + sin(tt * 2.0) * 0.05, -0.13)) - 0.022);
+      d = min(d, sdSeg(q, sr, er) - 0.025);
+      d = min(d, sdSeg(q, er, er + vec2(0.05, -0.12 + cos(tt) * 0.06)) - 0.022);
+      vec3 hue = 0.5 + 0.5 * cos(uTime * 1.3 + h * 6.0 + vec3(0.0, 2.1, 4.2));
+      col = mix(col, (hue * vec3(1.0, 0.6, 1.0) + vec3(0.2, 0.0, 0.25)) * length(col) * 0.75, 0.75);
+      vec2 bc = vec2(0.78, 0.18);
+      float facets = 0.6 + 0.4 * step(0.5, fract((q.x + q.y + uTime * 0.2) * 30.0));
+      paint = vec4(vec3(0.85, 0.85, 0.95) * facets, 1.0 - smoothstep(0.04 - aa, 0.04 + aa, length(q - bc)));
+      d = min(d, sdSeg(q, vec2(0.78, 0.0), bc) - 0.004);
+      vec2 cell = floor(q * 9.0 + vec2(uTime * 0.3, 0.0));
+      vec2 sp = fract(q * 9.0 + vec2(uTime * 0.3, 0.0)) - 0.5;
+      glow += hue * 0.35 * smoothstep(0.12, 0.05, length(sp)) * step(0.6, hash(cell));
+    } else if (sc < 2.5) {
+      // a cat on the rail, tail swishing over the edge, eyes catching the light
+      float cx = mix(0.3, 0.65, hash(id + 24.0));
+      d = sdEll(q, vec2(cx, R - 0.08), vec2(0.075, 0.09));
+      d = smin(d, sdEll(q, vec2(cx - 0.04, R - 0.1), vec2(0.045, 0.075)), 0.03);
+      vec2 hc = vec2(cx - 0.035, R - 0.2);
+      d = smin(d, length(q - hc) - 0.055, 0.025);
+      d = min(d, sdTri(q, hc + vec2(-0.05, -0.02), hc + vec2(-0.045, -0.095), hc + vec2(-0.005, -0.045)) - 0.004);
+      d = min(d, sdTri(q, hc + vec2(0.05, -0.02), hc + vec2(0.045, -0.095), hc + vec2(0.005, -0.045)) - 0.004);
+      vec2 t0 = vec2(cx + 0.06, R - 0.02);
+      vec2 t1 = vec2(cx + 0.12, R + 0.07);
+      vec2 t2 = t1 + vec2(sin(t * 1.7) * 0.06, 0.12);
+      d = min(d, min(sdSeg(q, t0, t1), sdSeg(q, t1, t2)) - 0.016);
+      float open = step(0.05, fract(t * 0.18));
+      float eyes = smoothstep(0.013, 0.006, length(q - hc - vec2(-0.022, 0.0))) + smoothstep(0.013, 0.006, length(q - hc - vec2(0.022, 0.0)));
+      paint = vec4(vec3(0.85, 0.95, 0.3), eyes * open);
+    } else if (sc < 3.5) {
+      // late-night coding: dark room lit by the laptop, typing in bursts
+      col = mix(col, vec3(0.09, 0.1, 0.18), 0.75);
+      float typing = step(0.0, sin(t * 0.9)) * sin(uTime * 22.0) * 0.006;
+      d = sdEll(q, vec2(0.31, 0.62), vec2(0.07, 0.078));
+      d = smin(d, sdEll(q, vec2(0.28, 0.6), vec2(0.09, 0.1)), 0.02); // hood
+      d = smin(d, sdSeg(q, vec2(0.26, 0.74), vec2(0.21, 1.25)) - 0.11, 0.05);
+      d = min(d, sdSeg(q, vec2(0.33, 0.8), vec2(0.47, 0.94 + typing)) - 0.028);
+      d = min(d, sdRBox(q, vec2(0.6, 0.99), vec2(0.42, 0.018), 0.004));
+      d = min(d, sdSeg(q, vec2(0.48, 0.965), vec2(0.66, 0.965)) - 0.008);
+      d = min(d, sdSeg(q, vec2(0.66, 0.965), vec2(0.6, 0.79)) - 0.009);
+      d = min(d, sdRBox(q, vec2(0.83, 0.93), vec2(0.03, 0.04), 0.006));
+      float ds = sdSeg(q, vec2(0.655, 0.955), vec2(0.6, 0.8));
+      float fl = 0.85 + 0.15 * sin(uTime * 5.0 + h * 9.0);
+      glow += vec3(0.25, 0.45, 1.0) * exp(-ds * 7.0) * 0.8 * fl;
+      float scr = sdSeg(q, vec2(0.648, 0.955), vec2(0.594, 0.805)) - 0.006;
+      paint = vec4(vec3(0.55, 0.75, 1.0) * fl, (1.0 - smoothstep(0.0, aa, scr)) * 0.9);
+    } else if (sc < 4.5) {
+      // guitar: strumming, head bobbing, notes drifting up
+      float bob = sin(t * 2.0) * 0.012;
+      d = person(q, vec2(0.42, 0.5 + bob), hair, 0.2);
+      float g = min(length(q - vec2(0.5, 1.0)) - 0.1, length(q - vec2(0.45, 0.9)) - 0.075);
+      g = min(g, sdSeg(q, vec2(0.45, 0.9), vec2(0.2, 0.7)) - 0.017);
+      g = min(g, sdRBox(q, vec2(0.19, 0.69), vec2(0.03, 0.02), 0.006));
+      g = max(g, -(length(q - vec2(0.48, 0.96)) - 0.024));
+      vec3 wood = vec3(0.32, 0.16, 0.07) * (0.7 + 0.5 * smoothstep(0.1, 0.0, length(q - vec2(0.46, 0.94))));
+      paint = vec4(wood, 1.0 - smoothstep(-aa, aa, g));
+      vec2 hd = vec2(0.5 + sin(t * 7.0) * 0.03, 0.97);
+      d = min(d, sdSeg(q, vec2(0.54, 0.67), vec2(0.6, 0.84)) - 0.028);
+      d = min(d, sdSeg(q, vec2(0.6, 0.84), hd) - 0.024);
+      d = min(d, sdSeg(q, vec2(0.3, 0.67), vec2(0.26, 0.8)) - 0.026);
+      d = min(d, sdSeg(q, vec2(0.26, 0.8), vec2(0.29, 0.75)) - 0.022);
+      float nt = fract(uTime * 0.3 + h);
+      vec2 np = vec2(0.74 + sin(nt * 9.0) * 0.04, 0.82 - nt * 0.6);
+      float nd = min(sdEll(q, np, vec2(0.024, 0.018)), sdSeg(q, np + vec2(0.02, 0.0), np + vec2(0.02, -0.08)) - 0.005);
+      glow += vec3(1.0, 0.9, 0.7) * (1.0 - smoothstep(0.0, aa * 1.5, nd)) * sin(nt * 3.14159) * 0.7;
+    } else if (sc < 5.5) {
+      // reading in an armchair under a floor lamp, turning a page now and then
+      d = sdRBox(q, vec2(0.62, 0.95), vec2(0.17, 0.25), 0.07);
+      d = min(d, sdRBox(q, vec2(0.45, 1.02), vec2(0.06, 0.12), 0.04));
+      d = min(d, person(q, vec2(0.54, 0.62), hair, 0.12));
+      float pg = smoothstep(0.85, 1.0, sin(t * 0.5));
+      d = min(d, sdSeg(q, vec2(0.42, 0.84), vec2(0.35, 0.76)) - 0.01);
+      d = min(d, sdSeg(q, vec2(0.42, 0.84), mix(vec2(0.49, 0.76), vec2(0.36, 0.74), pg)) - 0.01);
+      d = min(d, sdSeg(q, vec2(0.5, 0.8), vec2(0.43, 0.84)) - 0.022);
+      d = min(d, sdSeg(q, vec2(0.17, 0.6), vec2(0.17, 1.3)) - 0.008);
+      float sh = max(sdTri(q, vec2(0.1, 0.6), vec2(0.24, 0.6), vec2(0.17, 0.48)) - 0.01, q.y - 0.6);
+      sh = min(sh, sdRBox(q, vec2(0.17, 0.55), vec2(0.06, 0.05), 0.01));
+      paint = vec4(vec3(1.0, 0.86, 0.55), 1.0 - smoothstep(-aa, aa, sh));
+      glow += vec3(1.0, 0.75, 0.4) * exp(-length((q - vec2(0.17, 0.62)) * vec2(1.6, 1.0)) * 6.0) * 0.35;
+    } else {
+      // TV night: two heads over the back of a couch
+      d = sdRBox(q, vec2(0.5, 1.14), vec2(0.44, 0.13), 0.06);
+      d = min(d, person(q, vec2(0.34, 0.86), hair, 0.1));
+      d = min(d, person(q, vec2(0.64, 0.84 + sin(t * 0.4) * 0.01), mod(hair + 2.0, 4.0), 0.1));
+    }
+
+    float m = 1.0 - smoothstep(-aa, aa, d);
+    float rim = smoothstep(-0.03, -0.004, d);
+    col = mix(col, vec3(0.035, 0.028, 0.03) + col * 0.22 * rim, m);
+    col = mix(col, paint.rgb, paint.a);
+    return col + glow;
+  }
+
+  // A stairwell window: a flight of stairs under a fluorescent tube, zig-zagging from storey to storey
+  vec3 stairwell(vec2 wp, vec2 cell, vec2 id) {
     vec2 u = wp / uWin;
+    float x = mod(cell.y, 2.0) < 0.5 ? u.x : 1.0 - u.x;
+    float flick = 1.0 - 0.45 * step(0.6, hash(vec2(floor(uTime * 14.0), id.x))) * step(0.92, sin(uTime * 0.5 + hash(id) * 30.0));
+    vec3 col = vec3(0.42, 0.5, 0.48) * (0.5 + 0.5 * (1.0 - u.y)) * flick;
+    col += vec3(0.03, 0.04, 0.04) * step(0.5, fract(u.y * 6.0 + 0.2)); // block wall
+    // the flight: seven steps from bottom-left to top-right, light catching each nosing
+    float n = 7.0;
+    float k = floor(x * n);
+    float edgeY = 1.0 - (k + 1.0) / n * 0.72;
+    float under = step(edgeY, u.y);
+    vec3 conc = vec3(0.16, 0.18, 0.19) * flick;
+    conc += vec3(0.18, 0.2, 0.2) * (1.0 - step(0.035, u.y - edgeY)) * flick;
+    col = mix(col, conc, under);
+    // handrail and posts
+    float railY = 1.0 - x * 0.72 - 0.24;
+    float rail = 1.0 - step(0.014, abs(u.y - railY));
+    float post = (1.0 - step(0.012, abs(fract(x * n * 0.5) - 0.5) * 2.0 / n)) * step(railY, u.y) * (1.0 - under);
+    col = mix(col, vec3(0.06, 0.07, 0.08), max(rail, post));
+    // fluorescent tube, and a green exit sign
+    float tube = box(u, vec2(0.25, 0.05), vec2(0.75, 0.085));
+    col = mix(col, vec3(0.92, 1.0, 0.96) * flick, tube);
+    col += vec3(0.25, 0.3, 0.28) * exp(-abs(u.y - 0.07) * 10.0) * 0.35 * flick;
+    vec2 ex = vec2(mod(cell.y, 2.0) < 0.5 ? 0.8 : 0.2, 0.2);
+    col = mix(col, vec3(0.2, 0.95, 0.45), box(u, ex - vec2(0.09, 0.035), ex + vec2(0.09, 0.035)));
+    // not every landing is on show: blinds, a half-drawn curtain, or the light's off
+    float cover = hash(id + 31.0);
+    if (cover < 0.22) {
+      col = vec3(0.34, 0.4, 0.4) * flick * (0.75 + 0.25 * step(0.4, fract(u.y * 11.0))) * (0.7 + 0.3 * (1.0 - u.y));
+    } else if (cover < 0.4) {
+      float side = mod(cell.y, 2.0) < 0.5 ? 1.0 - u.x : u.x;
+      float folds = 0.8 + 0.2 * sin(side * 60.0);
+      col = mix(col, vec3(0.2, 0.24, 0.3) * folds * flick, smoothstep(0.42, 0.4, side));
+    } else if (cover < 0.55) {
+      col = vec3(0.025, 0.03, 0.04) + vec3(0.02, 0.025, 0.03) * (1.0 - u.y);
+      col = mix(col, vec3(0.12, 0.5, 0.25), box(u, ex - vec2(0.09, 0.035), ex + vec2(0.09, 0.035)));
+    }
+    float edge = min(min(wp.x, uWin.x - wp.x), min(wp.y, uWin.y - wp.y));
+    return mix(col, FRAME, 1.0 - step(2.0, edge));
+  }
+
+  // An ordinary apartment window: lit, TV-lit or dark, with a balcony rail; sc >= 0 puts one of the
+  // little scenes in it
+  vec3 apartment(vec2 wp, vec2 id, float sc) {
+    vec2 u = wp / uWin;
+    vec2 q = vec2(u.x, u.y * uWin.y / uWin.x);
     float h = hash(id);
     vec3 col;
-    if (h > 0.64) {
-      vec3 lc = mix(AMBER, vec3(1.0, 0.86, 0.62), hash(id + 3.0)) * mix(0.5, 0.95, hash(id + 4.0));
-      col = lc * (0.6 + 0.4 * (1.0 - u.y));
-      if (hash(id + 8.0) > 0.7) col *= 0.7 + 0.3 * step(0.45, fract(u.y * 9.0)); // blinds
-      if (hash(id + 9.0) > 0.65) col = mix(col, vec3(0.3, 0.09, 0.06), smoothstep(0.22, 0.17, u.x)); // curtain
-      // someone's silhouette now and then
-      if (hash(id + 21.0) > 0.85) {
-        float x = mix(0.35, 0.7, hash(id + 22.0));
-        float body = box(u, vec2(x - 0.07, 0.42), vec2(x + 0.07, 1.0));
-        float head = 1.0 - smoothstep(0.065, 0.08, length((u - vec2(x, 0.34)) * vec2(1.0, uWin.y / uWin.x)));
-        col = mix(col, vec3(0.04, 0.03, 0.03), max(body, head));
-      }
-    } else if (h > 0.6) {
+    if (sc > 5.5 || (sc < -0.5 && h > 0.6 && h <= 0.64)) {
       float flick = 0.6 + 0.4 * sin(uTime * 7.0 + h * 50.0) * sin(uTime * 3.1 + h * 20.0);
       col = vec3(0.12, 0.2, 0.42) * flick;
+      if (sc > 5.5) col = occupant(col, q, id, sc);
+    } else if (sc > -0.5 || h > 0.64) {
+      vec3 lc = mix(AMBER, vec3(1.0, 0.86, 0.62), hash(id + 3.0)) * mix(0.5, 0.95, hash(id + 4.0));
+      col = lc * (0.6 + 0.4 * (1.0 - u.y));
+      if (sc > -0.5) {
+        col = occupant(col, q, id, sc);
+      } else {
+        if (hash(id + 8.0) > 0.7) col *= 0.7 + 0.3 * step(0.45, fract(u.y * 9.0)); // blinds
+        if (hash(id + 9.0) > 0.65) col = mix(col, vec3(0.3, 0.09, 0.06), smoothstep(0.22, 0.17, u.x)); // curtain
+      }
     } else {
       col = vec3(0.02, 0.026, 0.04) + vec3(0.025, 0.03, 0.045) * (1.0 - u.y);
       col += vec3(0.045, 0.055, 0.075) * smoothstep(0.05, 0.0, abs(u.x - u.y * 0.5 - 0.2));
@@ -401,7 +627,19 @@ const fragmentShader = /* glsl */ `
       if (p.y >= plinthTop) {
         col = groundFloor(p, B, plinthTop);
       } else if (inGrid > 0.5 && wp.x < uWin.x && wp.y < uWin.y) {
-        col = apartment(wp, cell + seed * 97.0);
+        // which little scene (if any) lives here, and is this the stairwell column?
+        float sc = -1.0;
+        for (int i = 0; i < NSCENE; i++) {
+          if (i >= uSceneN) break;
+          vec4 e = uScene[i];
+          if (abs(e.x - B.x) < 0.5 && e.y == cell.x && e.z == cell.y) sc = e.w;
+        }
+        float stair = 0.0;
+        for (int i = 0; i < MAXB; i++) {
+          if (i >= uStairN) break;
+          if (abs(uStair[i].x - B.x) < 0.5 && uStair[i].y == cell.x) stair = 1.0;
+        }
+        col = stair > 0.5 ? stairwell(wp, cell, cell + seed * 97.0) : apartment(wp, cell + seed * 97.0, sc);
       } else if (step(0.0, cell.y) > 0.5 && lp.x > 2.0 && lp.x < B.z - 3.0) {
         // floor slab between storeys, with a little rain-shadow under it
         float sy = wp.y - uWin.y - uGap.y * 0.3;
@@ -621,11 +859,25 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
     uWin: { value: new THREE.Vector2(1, 1) },
     uGap: { value: new THREE.Vector2(1, 1) },
     uPad: { value: new THREE.Vector2(1, 1) },
-    uBld: { value: Array.from({ length: MAX_BUILDINGS }, () => new THREE.Vector4()) },
+    uBld: {
+      value: Array.from({ length: MAX_BUILDINGS }, () => new THREE.Vector4()),
+    },
     uBldN: { value: 0 },
-    uProj: { value: Array.from({ length: MAX_PROJECTS }, () => new THREE.Vector4()) },
-    uProjS: { value: Array.from({ length: MAX_PROJECTS }, () => new THREE.Vector4()) },
+    uProj: {
+      value: Array.from({ length: MAX_PROJECTS }, () => new THREE.Vector4()),
+    },
+    uProjS: {
+      value: Array.from({ length: MAX_PROJECTS }, () => new THREE.Vector4()),
+    },
     uProjN: { value: 0 },
+    uScene: {
+      value: Array.from({ length: WINDOW_SCENES }, () => new THREE.Vector4()),
+    },
+    uSceneN: { value: 0 },
+    uStair: {
+      value: Array.from({ length: MAX_BUILDINGS }, () => new THREE.Vector2()),
+    },
+    uStairN: { value: 0 },
     uAtlas: { value: null as THREE.Texture | null },
     uTiles: { value: 1 },
     uAtlasReady: { value: 0 },
@@ -642,7 +894,9 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
     const el = s.cityEl;
     const m = mesh.current;
     const gm = glassMesh.current;
-    const mats = [matRef.current, glassMatRef.current].filter((x): x is THREE.ShaderMaterial => !!x);
+    const mats = [matRef.current, glassMatRef.current].filter(
+      (x): x is THREE.ShaderMaterial => !!x,
+    );
     if (!L || !el || !m || !gm || mats.length < 2) {
       if (m) m.visible = false;
       if (gm) gm.visible = false;
@@ -678,7 +932,11 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
         const w = L.windows[i];
         const cx = rect.left + w.x + w.w / 2;
         const cy = rect.top + w.y + w.h / 2;
-        if (Math.abs(cx - umbrellaState.gx) < R * 0.85 && cy > zoneTop && cy < zoneBottom) {
+        if (
+          Math.abs(cx - umbrellaState.gx) < R * 0.85 &&
+          cy > zoneTop &&
+          cy < zoneBottom
+        ) {
           sheltered = i;
           break;
         }
@@ -715,7 +973,13 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
     s.streetTop = rect.top + window.scrollY + L.height;
     if (!visible) return;
     const k = worldPerPixel(size.height, 0);
-    const [cx, cy] = pxToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2, size.width, size.height, 0);
+    const [cx, cy] = pxToWorld(
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2,
+      size.width,
+      size.height,
+      0,
+    );
     m.position.set(cx, cy, 0);
     m.scale.set(rect.width * k, rect.height * k, 1);
     gm.position.copy(m.position);
@@ -735,7 +999,13 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
       u.uSkyTop.value = L.skyTop;
       u.uBase.value = L.baseY;
       u.uPlinth.value = L.plinthH;
-      if (L.billboard) u.uBill.value.set(L.billboard.x, L.billboard.y, L.billboard.w, L.billboard.h);
+      if (L.billboard)
+        u.uBill.value.set(
+          L.billboard.x,
+          L.billboard.y,
+          L.billboard.w,
+          L.billboard.h,
+        );
       else u.uBill.value.set(0, 0, 0, 0);
       u.uWin.value.set(L.win.w, L.win.h);
       u.uGap.value.set(L.gap.x, L.gap.y);
@@ -749,9 +1019,20 @@ export default function Skyline({ images, onReveal }: SkylineProps) {
       for (let i = 0; i < n; i++) {
         const w = L.windows[i];
         u.uProj.value[i].set(w.x, w.y, w.w, w.h);
-        u.uProjS.value[i].set(s.shown[i], glow.current[i], s.revealed[i], w.project);
+        u.uProjS.value[i].set(
+          s.shown[i],
+          glow.current[i],
+          s.revealed[i],
+          w.project,
+        );
       }
       u.uProjN.value = n;
+      L.scenes.forEach((c, i) =>
+        u.uScene.value[i].set(c.x, c.col, c.row, c.scene),
+      );
+      u.uSceneN.value = L.scenes.length;
+      L.stairs.forEach((c, i) => u.uStair.value[i].set(c.x, c.col));
+      u.uStairN.value = L.stairs.length;
       u.uAtlas.value = atlas;
       u.uTiles.value = images.length;
       u.uAtlasReady.value = atlas ? 1 : 0;

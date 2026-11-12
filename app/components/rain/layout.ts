@@ -2,6 +2,7 @@
 // (buildings), so both draw from the exact same numbers. All values are px relative to the city container.
 
 export const MAX_BUILDINGS = 8;
+export const WINDOW_SCENES = 7; // coffee, dance party, cat, laptop, guitar, reader, couch + TV
 export const MAX_PROJECT_WINDOWS = 16;
 
 export const BILLBOARD_PAD = 24; // glow margin painted around the résumé billboard
@@ -47,6 +48,8 @@ export interface CityLayout {
   buildings: Building[]; // sorted far -> near (draw order)
   windows: ProjectWindow[]; // index = project index
   billboard: Rect | null; // the résumé billboard, mounted over the lower storeys of one building
+  stairs: { x: number; col: number }[]; // stairwell column per building (x = building's left edge)
+  scenes: { x: number; row: number; col: number; scene: number }[]; // each little window scene, used once
 }
 
 function mulberry32(seed: number) {
@@ -63,13 +66,22 @@ function mulberry32(seed: number) {
  * @param skyTop px reserved at the top for the header (the sky); buildings rise from just below it
  * @param minHeight the city is at least this tall (usually the first screen)
  */
-export function computeCityLayout(width: number, count: number, skyTop: number, minHeight: number): CityLayout {
+export function computeCityLayout(
+  width: number,
+  count: number,
+  skyTop: number,
+  minHeight: number,
+): CityLayout {
   const rand = mulberry32(20251006);
   const small = width < 640;
   const medium = width < 1100;
 
   // close enough to see the frost, drips and the project inside each window
-  const win = small ? { w: 52, h: 68 } : medium ? { w: 70, h: 90 } : { w: 84, h: 108 };
+  const win = small
+    ? { w: 52, h: 68 }
+    : medium
+      ? { w: 70, h: 90 }
+      : { w: 84, h: 108 };
   const gap = { x: Math.round(win.w * 0.36), y: Math.round(win.h * 0.4) };
   const pad = { x: Math.round(win.w * 0.42), top: Math.round(win.h * 0.55) };
   const stepX = win.w + gap.x;
@@ -80,7 +92,7 @@ export function computeCityLayout(width: number, count: number, skyTop: number, 
   const nb = Math.min(MAX_BUILDINGS, small ? 2 : 3);
   const cap = Math.ceil(count / nb);
   const slot = width / nb;
-  const projRows = small ? 5 : 2; // storeys the project windows can use, from the top down
+  const projRows = small ? 5 : 2; // storeys above the billboard (sets how tall the buildings are)
   const billboardRows = 2;
 
   const tops: number[] = [];
@@ -90,13 +102,24 @@ export function computeCityLayout(width: number, count: number, skyTop: number, 
     const cols = Math.max(2, Math.floor((target - pad.x * 2 + gap.x) / stepX));
     const w = cols * stepX - gap.x + pad.x * 2;
     const jitter = (slot - w) * (rand() - 0.5) * 0.8;
-    geo.push({ x: Math.round(i * slot + (slot - w) / 2 + jitter), w, cols, depth: rand() * 0.4 });
+    geo.push({
+      x: Math.round(i * slot + (slot - w) / 2 + jitter),
+      w,
+      cols,
+      depth: rand() * 0.4,
+    });
     tops.push(Math.round(skyTop + 8 + rand() * 34));
   }
 
   // every building stands on the same sidewalk; it sits low enough for the lowest roof to fit all storeys
   const storeys = projRows + billboardRows;
-  let baseY = Math.max(...tops) + pad.top + storeys * stepY - gap.y + Math.round(gap.y * 0.6) + plinthH;
+  let baseY =
+    Math.max(...tops) +
+    pad.top +
+    storeys * stepY -
+    gap.y +
+    Math.round(gap.y * 0.6) +
+    plinthH;
   let height = baseY + GROUND_H + POOL_H;
   if (height < minHeight) {
     baseY += minHeight - height;
@@ -106,7 +129,10 @@ export function computeCityLayout(width: number, count: number, skyTop: number, 
   const buildings: Building[] = geo.map((g, i) => ({
     ...g,
     top: tops[i],
-    rows: Math.max(1, Math.floor((baseY - plinthH - tops[i] - pad.top + gap.y * 0.4) / stepY)),
+    rows: Math.max(
+      1,
+      Math.floor((baseY - plinthH - tops[i] - pad.top + gap.y * 0.4) / stepY),
+    ),
   }));
 
   // the résumé billboard covers the lowest two storeys of the middle building
@@ -120,13 +146,18 @@ export function computeCityLayout(width: number, count: number, skyTop: number, 
     h: billboardRows * stepY - Math.round(gap.y * 0.3),
   };
 
-  // Spread projects: one per building, extras go to the widest buildings (evenly capped)
+  // Spread projects: one per building, extras go where the fewest windows are taken so far
   const perBuilding = new Array(nb).fill(0);
+  const cells = buildings.map(
+    (b, bi) => b.cols * (bi === bbIndex ? bbRow : b.rows),
+  );
   for (let p = 0; p < count; p++) {
     if (p < nb) {
       perBuilding[p % nb]++;
     } else {
-      const order = [...buildings.keys()].sort((a, b) => buildings[b].w - buildings[a].w);
+      const order = [...buildings.keys()].sort(
+        (a, b) => perBuilding[a] / cells[a] - perBuilding[b] / cells[b],
+      );
       const target = order.find((b) => perBuilding[b] < cap) ?? order[0];
       perBuilding[target]++;
     }
@@ -135,34 +166,93 @@ export function computeCityLayout(width: number, count: number, skyTop: number, 
   // Interleave project order across the skyline so neighbours aren't consecutive projects
   const windows: ProjectWindow[] = [];
   const slotsFor: { building: number; x: number; y: number }[] = [];
+  const projCells = new Set<string>();
   buildings.forEach((b, bi) => {
-    const lastRow = Math.min(projRows, bi === bbIndex ? bbRow : b.rows) - 1;
+    const lastRow = (bi === bbIndex ? bbRow : b.rows) - 1; // any storey above the billboard
     const used: [number, number][] = [];
-    // the upper storeys, in a seeded random order
+    // every storey, in a seeded random order
     const cells: [number, number][] = [];
-    for (let row = 0; row <= lastRow; row++) for (let col = 0; col < b.cols; col++) cells.push([row, col]);
+    for (let row = 0; row <= lastRow; row++)
+      for (let col = 0; col < b.cols; col++) cells.push([row, col]);
     for (let i = cells.length - 1; i > 0; i--) {
       const j = Math.floor(rand() * (i + 1));
       [cells[i], cells[j]] = [cells[j], cells[i]];
     }
     for (let k = 0; k < perBuilding[bi]; k++) {
-      const free = cells.filter(([r, c]) => !used.some(([ur, uc]) => ur === r && uc === c));
+      const free = cells.filter(
+        ([r, c]) => !used.some(([ur, uc]) => ur === r && uc === c),
+      );
       // prefer windows that aren't right next to another project; never reuse one
       const pick =
-        free.find(([r, c]) => used.every(([ur, uc]) => Math.abs(ur - r) >= 2 || Math.abs(uc - c) >= 2)) ?? free[0];
+        free.find(([r, c]) =>
+          used.every(
+            ([ur, uc]) => Math.abs(ur - r) >= 2 || Math.abs(uc - c) >= 2,
+          ),
+        ) ?? free[0];
       if (!pick) break;
       const [row, col] = pick;
       used.push([row, col]);
-      slotsFor.push({ building: bi, x: b.x + pad.x + col * stepX, y: b.top + pad.top + row * stepY });
+      projCells.add(`${bi}:${row}:${col}`);
+      slotsFor.push({
+        building: bi,
+        x: b.x + pad.x + col * stepX,
+        y: b.top + pad.top + row * stepY,
+      });
     }
   });
   slotsFor.sort((a, b) => a.x - b.x);
   slotsFor.slice(0, count).forEach((s, project) => {
-    windows.push({ project, building: s.building, x: s.x, y: s.y, w: win.w, h: win.h });
+    windows.push({
+      project,
+      building: s.building,
+      x: s.x,
+      y: s.y,
+      w: win.w,
+      h: win.h,
+    });
   });
 
+  // A stairwell column in each building wide enough to spare one (the one with fewest projects), then
+  // every little window scene once, spread over the buildings, in the remaining windows
+  const stairs: CityLayout["stairs"] = [];
+  const stairCol = buildings.map((b, bi) => {
+    if (b.cols < 3 || bi === bbIndex) return -1;
+    const load = (c: number) =>
+      [...projCells].filter(
+        (k) => k.startsWith(`${bi}:`) && k.endsWith(`:${c}`),
+      ).length;
+    const cs = [...Array(b.cols).keys()].sort(
+      (a, c) => load(a) - load(c) || (a === 0 || a === b.cols - 1 ? -1 : 1),
+    );
+    stairs.push({ x: b.x, col: cs[0] });
+    return cs[0];
+  });
+  const free: { bi: number; row: number; col: number }[] = [];
+  buildings.forEach((b, bi) => {
+    const rows = bi === bbIndex ? bbRow : b.rows;
+    for (let row = 0; row < rows; row++)
+      for (let col = 0; col < b.cols; col++)
+        if (col !== stairCol[bi] && !projCells.has(`${bi}:${row}:${col}`))
+          free.push({ bi, row, col });
+  });
+  for (let i = free.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [free[i], free[j]] = [free[j], free[i]];
+  }
+  const scenes: CityLayout["scenes"] = [];
+  const perB = new Array(nb).fill(0);
+  for (let scene = 0; scene < WINDOW_SCENES && free.length; scene++) {
+    const min = Math.min(...free.map((c) => perB[c.bi]));
+    const k = free.findIndex((c) => perB[c.bi] === min);
+    const c = free.splice(k, 1)[0];
+    perB[c.bi]++;
+    scenes.push({ x: buildings[c.bi].x, row: c.row, col: c.col, scene });
+  }
+
   // Draw far buildings first; ties keep left-to-right order
-  const order = buildings.map((b, i) => ({ b, i })).sort((a, b) => b.b.depth - a.b.depth);
+  const order = buildings
+    .map((b, i) => ({ b, i }))
+    .sort((a, b) => b.b.depth - a.b.depth);
   const remap = new Map(order.map((o, ni) => [o.i, ni]));
   return {
     width,
@@ -176,5 +266,7 @@ export function computeCityLayout(width: number, count: number, skyTop: number, 
     buildings: order.map((o) => o.b),
     windows: windows.map((w) => ({ ...w, building: remap.get(w.building)! })),
     billboard,
+    stairs,
+    scenes,
   };
 }
