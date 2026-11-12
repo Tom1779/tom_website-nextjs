@@ -10,6 +10,7 @@ import { getGpu } from "./gpu";
 import { computeCityLayout, type CityLayout } from "./layout";
 import ResumeBillboard from "./ResumeBillboard";
 import ResumeDialog from "./ResumeDialog";
+import RainWarning from "./RainWarning";
 import SimpleView from "../SimpleView";
 
 const RainScene = dynamic(() => import("./RainScene"), { ssr: false });
@@ -77,6 +78,7 @@ export default function RainProjects({ items, renderList, about, renderAboutDeta
   // the profile card pop-up opened from the signal
   const [profileOpen, setProfileOpen] = useState(false);
   const [resumeOpen, setResumeOpen] = useState(false);
+  const [rainWarning, setRainWarning] = useState<"" | "software" | "unknown">("");
   const closeResume = useCallback(() => setResumeOpen(false), []);
   const closeProfileRef = useRef<HTMLButtonElement>(null);
   const cityRef = useRef<HTMLDivElement>(null);
@@ -107,6 +109,8 @@ export default function RainProjects({ items, renderList, about, renderAboutDeta
     setMode(initial);
     setReady(true);
   }, []);
+
+  const closeRainWarning = useCallback(() => setRainWarning(""), []);
 
   const switchMode = (next: ViewMode) => {
     setSlowNotice("");
@@ -554,12 +558,27 @@ export default function RainProjects({ items, renderList, about, renderAboutDeta
                   : undefined
             }
             onResume={() => setResumeOpen(true)}
-            onRain={() => switchMode("rain")}
+            onRain={() => {
+              // where acceleration is off or can't be confirmed, check first: the city may lag
+              const gpu = getGpu();
+              if (gpu === "software" || gpu === "unknown") setRainWarning(gpu);
+              else switchMode("rain");
+            }}
           />
         )}
       </section>
 
       {resumeOpen && resumeUrl && <ResumeDialog url={resumeUrl} onClose={closeResume} />}
+      {rainWarning && (
+        <RainWarning
+          gpu={rainWarning}
+          onConfirm={() => {
+            setRainWarning("");
+            switchMode("rain");
+          }}
+          onClose={closeRainWarning}
+        />
+      )}
       {/* portalled to <body>: <main> is its own stacking context, which would leave the navbar on top */}
       {profileOpen &&
         about &&
